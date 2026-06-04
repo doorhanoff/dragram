@@ -17,11 +17,20 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
 
     # JWT
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY:  str
+    JWT_ACCESS_TTL:  int = 900     # 15 минут
+    JWT_REFRESH_TTL: int = 604_800 # 7 дней
 
     # Admin seed
     ADMIN_EMAIL: str = "admin@admin.com"
     ADMIN_PASSWORD: str = "admin1234"
+
+    # s3
+    S3_ENDPOINT: str = "https://storage.yandexcloud.net"
+    S3_REGION: str = "ru-central1"
+    S3_BUCKET: str
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: str
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 

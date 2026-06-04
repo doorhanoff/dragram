@@ -24,7 +24,7 @@ class AuthService:
         return await self.repo.create_user(user)
 
     async def login(self, credentials: LoginForm) -> TokenPair | None:
-        user = await self.repo.get_user_by_email(credentials.email)
+        user = await self.repo.get_user_by_phone(credentials.phone_number)
         reference = user.password_hash if user else _DUMMY_HASH
         if not verify_password(credentials.password, reference) or not user:
             return None
@@ -47,10 +47,32 @@ class AuthService:
         await self.jwt_manager.revoke_token(token)
 
     async def refresh_access_token(self, refresh_token: str) -> TokenPair | None:
-        token = await self.jwt_manager.verify_token(refresh_token, expected_type=TokenType.REFRESH)
-        user = await self.repo.get_user_by_id(uuid.UUID(token.sub))
+        payload = await self.jwt_manager.verify_token(refresh_token, expected_type=TokenType.REFRESH)
+        user = await self.repo.get_user_by_id(uuid.UUID(payload.sub))
         if not user:
             return None
-        return await self.jwt_manager.refresh_access_token(
-            refresh_token=refresh_token,
-        )
+        return await self.jwt_manager.refresh_access_token(refresh_token=refresh_token)
+
+    async def search_users(self, search_text: str, offset: int = 0, limit: int = 10) -> list[UsersOrm]:
+        return await self.repo.search(search_text, offset, limit)
+
+    async def set_key_backup(self, user_id: uuid.UUID, backup: str) -> None:
+        await self.repo.set_key_backup(user_id, backup)
+
+    async def get_key_backup(self, user_id: uuid.UUID) -> str | None:
+        return await self.repo.get_key_backup(user_id)
+
+    async def set_active(self, user_id: uuid.UUID, active: bool) -> None:
+        await self.repo.set_active(user_id, active)
+
+    async def upload_avatar(self, user_id: uuid.UUID, file, s3) -> str:
+        url = await s3.upload_file(file.file, file.content_type)
+        await self.repo.update_avatar(user_id, url)
+        return url
+
+    async def set_public_key(self, user_id: uuid.UUID, public_key: str) -> None:
+        await self.repo.set_public_key(user_id, public_key)
+
+    async def get_public_key(self, user_id: uuid.UUID) -> str | None:
+        return await self.repo.get_public_key(user_id)
+

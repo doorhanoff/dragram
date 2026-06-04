@@ -24,10 +24,11 @@ app.mount("/media", StaticFiles(directory="media"), name="media")
 
 app.include_router(router)
 
-# SPA fallback for production builds
 FRONTEND_DIST = Path("frontend/dist")
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):

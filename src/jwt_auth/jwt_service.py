@@ -18,7 +18,7 @@ from jwt.exceptions import (
     MissingRequiredClaimError,
 )
 
-from src.redis.redis_service import RedisService
+import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class TokenPair:
 class JWTManager:
     def __init__(
         self,
-        redis: RedisService,
+        redis: aioredis.Redis,
         secret_or_private_key: str = "",
         *,
         algorithm: Algorithm = Algorithm.HS256,
@@ -160,8 +160,8 @@ class JWTManager:
 
         if token_type == TokenType.REFRESH:
             await self.redis.set(
-                key=self._token_state_key(TokenType.REFRESH, payload["jti"]),
-                value=RefreshTokenStatus.ACTIVE.value,
+                self._token_state_key(TokenType.REFRESH, payload["jti"]),
+                RefreshTokenStatus.ACTIVE.value,
                 ex=self._refresh_ttl,
             )
         return token
@@ -221,10 +221,14 @@ class JWTManager:
         extra: dict[str, Any] | None = None,
     ) -> TokenPair:
         payload = await self.verify_token(refresh_token, expected_type=TokenType.REFRESH)
-        new_access = await self.create_token(payload.sub, token_type=TokenType.ACCESS, extra=extra)
+        # Rotation: отзываем старый refresh token — он больше не сработает
+        await self.revoke_token(refresh_token)
+        # Выдаём новую пару
+        new_access   = await self.create_token(payload.sub, token_type=TokenType.ACCESS,  extra=extra)
+        new_refresh  = await self.create_token(payload.sub, token_type=TokenType.REFRESH)
         return TokenPair(
             access_token=new_access,
-            refresh_token=refresh_token,
+            refresh_token=new_refresh,
             expires_in=self._access_ttl,
             refresh_expires_in=self._refresh_ttl,
         )

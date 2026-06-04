@@ -38,3 +38,7 @@ class UserShortResponse(BaseModel):
     name: str
     phone_number: RUPhone
     description: str | None
+    image_url: str | None = None
+    is_active: bool = False
+
+

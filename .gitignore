@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Alembic
+alembic/versions/*.py
+!alembic/versions/.gitkeep
+
+# Media / uploads
+media/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Logs
+*.log

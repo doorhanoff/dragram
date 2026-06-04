@@ -1,0 +1,14 @@
+{
+  "name": "Dragram",
+  "short_name": "Dragram",
+  "description": "Семейный мессенджер",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#3390ec",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["social", "communication"]
+}

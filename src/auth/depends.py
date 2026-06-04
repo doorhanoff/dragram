@@ -24,7 +24,7 @@ async def get_token_payload(
     request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> TokenData:
-    token = request.cookies.get("token")
+    token = _extract_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -39,24 +39,42 @@ async def get_token_payload(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-async def get_user_data(
+def _extract_token(request: Request) -> str | None:
+    """Принимает токен из куки (веб) или Authorization: Bearer (мобильное)."""
+    token = request.cookies.get("token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    return token or None
+
+
+async def get_current_user(
     request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> UsersOrm:
-    token = request.cookies.get("token")
+    token = _extract_token(request)
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    user = await service.get_user_data_by_token(token)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        user = await service.get_user_data_by_token(token)
+    except TokenExpiredError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except TokenRevokedError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
+    except (TokenInvalidError, JWTError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
 
-async def ws_get_user_data(
+async def ws_get_current_user(
     websocket: WebSocket,
     service: AuthService = Depends(get_auth_service),
 ) -> UsersOrm:
-    token = websocket.cookies.get("token")
+    # Куки (веб) или query param token=... (мобильное)
+    token = websocket.cookies.get("token") or websocket.query_params.get("token")
     if not token:
         raise WebSocketException(code=4001, reason="Not authenticated")
     try:

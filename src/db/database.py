@@ -13,8 +13,8 @@ async_engine = create_async_engine(
     url=db_settings.asyncpg_database_url,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=20,
+    pool_size=10,
+    max_overflow=5,
     pool_recycle=1800,
     pool_timeout=10,
 )

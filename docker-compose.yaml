@@ -25,8 +25,8 @@ services:
 
   fastapi:
     build: .
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     env_file:
       - .env
     environment:
@@ -37,6 +37,24 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      S3_BUCKET: ${S3_BUCKET}
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
