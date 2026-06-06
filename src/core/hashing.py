@@ -1,6 +1,8 @@
 from pwdlib import PasswordHash
+from pwdlib.hashers.bcrypt import BcryptHasher
 
-pwd_context = PasswordHash.recommended()
+# rounds=10 вместо recommended (12+) — достаточно безопасно, в 4x быстрее
+pwd_context = PasswordHash((BcryptHasher(rounds=10),))
 
 
 def hash_password(password: str) -> str:

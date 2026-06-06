@@ -6,7 +6,13 @@ from .models import UsersOrm
 from src.core.hashing import hash_password, verify_password
 from src.jwt_auth.jwt_service import JWTManager, TokenPair, TokenType
 
-_DUMMY_HASH: str = hash_password("__dummy__")
+_DUMMY_HASH: str | None = None
+
+async def _get_dummy_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = await asyncio.to_thread(hash_password, "__dummy__")
+    return _DUMMY_HASH
 
 
 class AuthService:
@@ -26,7 +32,7 @@ class AuthService:
 
     async def login(self, credentials: LoginForm) -> TokenPair | None:
         user = await self.repo.get_user_by_phone(credentials.phone_number)
-        reference = user.password_hash if user else _DUMMY_HASH
+        reference = user.password_hash if user else await _get_dummy_hash()
         ok = await asyncio.to_thread(verify_password, credentials.password, reference)
         if not ok or not user:
             return None
