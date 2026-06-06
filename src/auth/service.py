@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from .repo import AuthRepository
 from .schemas import RegisterForm, CreateUser, LoginForm, TokenData
 from .models import UsersOrm
@@ -14,7 +15,7 @@ class AuthService:
         self.jwt_manager = jwt_manager
 
     async def register(self, credentials: RegisterForm) -> UsersOrm:
-        hashed = hash_password(credentials.password)
+        hashed = await asyncio.to_thread(hash_password, credentials.password)
         user = CreateUser(
             name=credentials.name,
             phone_number=credentials.phone_number,
@@ -26,7 +27,8 @@ class AuthService:
     async def login(self, credentials: LoginForm) -> TokenPair | None:
         user = await self.repo.get_user_by_phone(credentials.phone_number)
         reference = user.password_hash if user else _DUMMY_HASH
-        if not verify_password(credentials.password, reference) or not user:
+        ok = await asyncio.to_thread(verify_password, credentials.password, reference)
+        if not ok or not user:
             return None
         return await self.jwt_manager.create_token_pair(
             subject=str(user.id),
