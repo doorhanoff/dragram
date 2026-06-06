@@ -10,6 +10,7 @@ async def init_redis():
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
         decode_responses=True,
+        ssl=settings.REDIS_SSL,
     )
 
 

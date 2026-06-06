@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Redis
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    REDIS_SSL: bool = False
 
     # JWT
     JWT_SECRET_KEY:  str
@@ -28,18 +29,22 @@ class Settings(BaseSettings):
     # s3
     S3_ENDPOINT: str = "https://storage.yandexcloud.net"
     S3_REGION: str = "ru-central1"
-    S3_BUCKET: str
-    S3_ACCESS_KEY: str
-    S3_SECRET_KEY: str
+    S3_BUCKET: str = ""
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
+
+    # SSL для облачных БД (Supabase требует)
+    DB_SSL: bool = False
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
     @property
     def asyncpg_database_url(self) -> str:
+        ssl = "&ssl=require" if self.DB_SSL else ""
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            "?prepared_statement_cache_size=0"
+            f"?prepared_statement_cache_size=0{ssl}"
         )
 
 
