@@ -40,11 +40,10 @@ class Settings(BaseSettings):
 
     @property
     def asyncpg_database_url(self) -> str:
-        ssl = "&ssl=require" if self.DB_SSL else ""
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            f"?prepared_statement_cache_size=0{ssl}"
+            "?prepared_statement_cache_size=0"
         )
 
 
