@@ -1,15 +1,45 @@
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+// На мобильном куки не работают кросс-домен — храним токены в localStorage
+const IS_NATIVE = !!import.meta.env.VITE_API_URL
+
+function getAccessToken()  { return IS_NATIVE ? localStorage.getItem('access_token')  : null }
+function getRefreshToken() { return IS_NATIVE ? localStorage.getItem('refresh_token') : null }
+function saveTokens(access, refresh) {
+  if (!IS_NATIVE) return
+  if (access)  localStorage.setItem('access_token',  access)
+  if (refresh) localStorage.setItem('refresh_token', refresh)
+}
+function clearTokens() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+}
+
 let _refreshing = false
 let _refreshQueue = []
 
 async function tryRefresh() {
   if (_refreshing) {
-    // Уже обновляется — ждём результата
     return new Promise((resolve, reject) => _refreshQueue.push({ resolve, reject }))
   }
   _refreshing = true
   try {
-    const res = await fetch('/auth/refresh', { method: 'POST', credentials: 'include' })
+    let res
+    if (IS_NATIVE) {
+      const refreshToken = getRefreshToken()
+      if (!refreshToken) throw new Error('no_refresh_token')
+      res = await fetch(BASE + '/auth/refresh', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${refreshToken}` },
+      })
+    } else {
+      res = await fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include' })
+    }
     if (!res.ok) throw new Error('refresh_failed')
+    if (IS_NATIVE) {
+      const data = await res.json()
+      saveTokens(data.access_token, data.refresh_token)
+    }
     _refreshQueue.forEach(p => p.resolve())
   } catch (e) {
     _refreshQueue.forEach(p => p.reject(e))
@@ -21,24 +51,33 @@ async function tryRefresh() {
 }
 
 async function req(method, path, body, isForm = false) {
-  const opts = { method, credentials: 'include' }
+  const opts = IS_NATIVE
+    ? { method, headers: {} }
+    : { method, credentials: 'include' }
+
+  if (IS_NATIVE) {
+    const token = getAccessToken()
+    if (token) opts.headers['Authorization'] = `Bearer ${token}`
+  }
+
   if (body && !isForm) {
-    opts.headers = { 'Content-Type': 'application/json' }
+    opts.headers = { ...(opts.headers || {}), 'Content-Type': 'application/json' }
     opts.body = JSON.stringify(body)
   } else if (body) {
     opts.body = body
   }
 
-  let res = await fetch(path, opts)
+  let res = await fetch(BASE + path, opts)
 
-  // Автоматический refresh при 401
   if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login') {
     try {
       await tryRefresh()
-      // Повторяем оригинальный запрос с новым куки
-      res = await fetch(path, opts)
+      if (IS_NATIVE) {
+        const token = getAccessToken()
+        if (token) opts.headers['Authorization'] = `Bearer ${token}`
+      }
+      res = await fetch(BASE + path, opts)
     } catch {
-      // Refresh не удался — сообщаем приложению через событие (без перезагрузки страницы)
       window.dispatchEvent(new Event('auth:expired'))
       throw new Error('Session expired')
     }
@@ -56,9 +95,17 @@ export const api = {
   getMe:           ()              => req('GET',  '/auth/me'),
   heartbeat:       ()              => req('POST', '/auth/heartbeat'),
   setOffline:      ()              => req('POST', '/auth/offline'),
-  login:           (phone, pwd)    => req('POST', '/auth/login',    { phone_number: phone, password: pwd }),
+  login: async (phone, pwd) => {
+    const data = await req('POST', '/auth/login', { phone_number: phone, password: pwd })
+    saveTokens(data?.access_token, data?.refresh_token)
+    return data
+  },
   register:        (data)          => req('POST', '/auth/register', data),
-  logout:          ()              => req('POST', '/auth/logout'),
+  logout: async () => {
+    const data = await req('POST', '/auth/logout')
+    clearTokens()
+    return data
+  },
   getChats:        ()              => req('GET',  '/chats/'),
   createChat:      (data)          => req('POST', '/chats/create',  data),
   getMessages:     (id, limit=50, beforeId=null) => {
@@ -86,8 +133,13 @@ export const api = {
       const fd  = new FormData()
       fd.append('file', file)
       const xhr = new XMLHttpRequest()
-      xhr.open('POST', `/chats/${id}/upload`)
-      xhr.withCredentials = true
+      xhr.open('POST', `${BASE}/chats/${id}/upload`)
+      if (IS_NATIVE) {
+        const token = getAccessToken()
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      } else {
+        xhr.withCredentials = true
+      }
       if (onProgress) {
         xhr.upload.onprogress = e => {
           if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100))
@@ -101,7 +153,6 @@ export const api = {
       xhr.send(fd)
     })
   },
-  // Posts
   getPosts:       (text, limit=20, offset=0, filter='all') => req('GET', `/posts/?${text ? `text=${encodeURIComponent(text)}&` : ''}limit=${limit}&offset=${offset}&filter=${filter}`),
   likePost:       (id)           => req('POST', `/posts/${id}/like`),
   bookmarkPost:   (id)           => req('POST', `/posts/${id}/bookmark`),
@@ -112,8 +163,13 @@ export const api = {
       const fd = new FormData()
       files.forEach(f => fd.append('files', f))
       const xhr = new XMLHttpRequest()
-      xhr.open('POST', `/posts/${id}/media`)
-      xhr.withCredentials = true
+      xhr.open('POST', `${BASE}/posts/${id}/media`)
+      if (IS_NATIVE) {
+        const token = getAccessToken()
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      } else {
+        xhr.withCredentials = true
+      }
       if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)) }
       xhr.onload  = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(String(xhr.status)))
       xhr.onerror = () => reject(new Error('Ошибка сети'))
@@ -129,4 +185,7 @@ export const api = {
     fd.append('photo', file)
     return req('POST', `/chats/${id}/photo`, fd, true)
   },
+
+  // Экспортируем для использования в WebSocket
+  getAccessToken,
 }

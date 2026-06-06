@@ -159,7 +159,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-bg">
       {/* Header */}
-      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 py-3 flex-shrink-0">
+      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 pb-3 flex-shrink-0" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)' }}>
         {onBack && (
           <button onClick={onBack} className="w-[30px] h-[30px] rounded-[7px] flex items-center justify-center text-accent hover:bg-bg transition-colors md:hidden">
             <IconArrowLeft size={18} stroke={1.5} />

@@ -84,7 +84,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
 
       <div
         className={[
-          'max-w-[68%] px-3 py-2 text-md leading-relaxed',
+          'max-w-[68%] px-3 py-2 text-md leading-relaxed break-words overflow-hidden',
           isSent
             ? 'bg-accent text-white rounded-[14px] rounded-br-[3px]'
             : 'bg-[#ECEDF5] text-primary rounded-[14px] rounded-bl-[3px]',

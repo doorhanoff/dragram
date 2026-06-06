@@ -5,6 +5,8 @@ WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+# Убираем .env.local чтобы VITE_API_URL не попал в production сборку
+RUN rm -f .env.local .env.production.local
 RUN npm run build
 
 # ── Шаг 2: Python-бэкенд ─────────────────────────────────────────────────

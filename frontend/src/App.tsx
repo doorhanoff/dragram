@@ -63,7 +63,6 @@ export default function App() {
   const [postQuery,     setPostQuery]     = useState('')
   const [postFilter,    setPostFilter]    = useState<'all'|'friends'|'saved'>('all')
   const [mobileScreen,  setMobileScreen]  = useState<'list'|'detail'>('list')
-  // Отдельная passphrase для бэкапа
 
   const wsRef          = useRef<WebSocket | null>(null)
   const activeChatRef  = useRef<string | null>(null)
@@ -134,7 +133,7 @@ export default function App() {
       }
 
       // IndexedDB пуст — нужен пароль для работы с бэкапом
-      if (!password) return
+      if (!password) { setUser(null); return }
 
       // 2. Проверяем бэкап на сервере
       const backupRes = await api.getKeyBackup().catch(() => null)
@@ -183,9 +182,17 @@ export default function App() {
   // ── WebSocket ─────────────────────────────────────────────────────────────
   const connectWS = useCallback((chatId: string) => {
     wsRef.current?.close()
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const host  = import.meta.env.DEV ? 'localhost:8000' : location.host
-    const ws    = new WebSocket(`${proto}://${host}/chats/ws/${chatId}`)
+    // Если задан VITE_WS_URL — используем его (нужно для Capacitor/мобильного)
+    // Иначе определяем по текущему хосту
+    let wsBase = import.meta.env.VITE_WS_URL as string | undefined
+    if (!wsBase) {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      const host  = import.meta.env.DEV ? 'localhost:8000' : location.host
+      wsBase = `${proto}://${host}`
+    }
+    const token = api.getAccessToken()
+    const wsUrl = `${wsBase.replace(/\/$/, '')}/chats/ws/${chatId}${token ? `?token=${token}` : ''}`
+    const ws = new WebSocket(wsUrl)
 
     ws.onmessage = async e => {
       const data = JSON.parse(e.data)
