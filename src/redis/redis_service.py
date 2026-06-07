@@ -9,6 +9,7 @@ async def init_redis():
     _redis = redis.Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD,
         decode_responses=True,
         ssl=settings.REDIS_SSL,
     )
