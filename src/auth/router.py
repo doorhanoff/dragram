@@ -31,8 +31,7 @@ class KeyBackupBody(BaseModel):
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(make_rate_limiter(max_requests=5, window=60))])
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(credentials: RegisterForm, service: AuthService = Depends(get_auth_service)):
     user = await service.register(credentials)
     if not user:
@@ -40,8 +39,7 @@ async def register(credentials: RegisterForm, service: AuthService = Depends(get
     return {"id": user.id}
 
 
-@router.post("/login",
-             dependencies=[Depends(make_rate_limiter(max_requests=10, window=60))])
+@router.post("/login")
 async def login(credentials: LoginForm, response: Response, service: AuthService = Depends(get_auth_service)):
     tokens = await service.login(credentials)
     if not tokens:
