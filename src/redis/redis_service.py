@@ -11,6 +11,8 @@ async def init_redis():
         port=settings.REDIS_PORT,
         decode_responses=True,
         ssl=settings.REDIS_SSL,
+        password=settings.REDIS_PASSWORD or None,
+        username=settings.REDIS_USER or None,
     )
 
 

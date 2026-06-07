@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_SSL: bool = False
+    REDIS_PASSWORD: str = ""
+    REDIS_USER: str = ""
 
     # JWT
     JWT_SECRET_KEY:  str
@@ -40,10 +42,11 @@ class Settings(BaseSettings):
 
     @property
     def asyncpg_database_url(self) -> str:
+        ssl = "&ssl=require" if self.DB_SSL else ""
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            "?prepared_statement_cache_size=0"
+            f"?prepared_statement_cache_size=0{ssl}"
         )
 
 
