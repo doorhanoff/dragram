@@ -67,6 +67,23 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
     )
   }
 
+  if (msg.type === 'video') {
+    return (
+      <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
+        {leftSlot}
+        <div className="relative">
+          <video src={msg.text} controls playsInline className="max-w-[260px] max-h-[320px] rounded-xl block bg-black" />
+          {isSent && (
+            <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
+              <span className="text-[10px] text-white/80">{time}</span>
+              <Checks isRead={msg.is_read} white />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (msg.type === 'audio') {
     return (
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
