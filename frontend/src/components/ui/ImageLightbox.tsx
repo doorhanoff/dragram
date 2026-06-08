@@ -53,14 +53,16 @@ export default function ImageLightbox({ images, startIndex = 0, onClose }: Props
       {/* Close */}
       <button
         onClick={close}
-        className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        className="absolute right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
       >
         <IconX size={18} stroke={2} />
       </button>
 
       {/* Counter */}
       {images.length > 1 && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/50 text-white text-xs px-3 py-1 rounded-full">
+        <div className="absolute left-1/2 -translate-x-1/2 z-10 bg-black/50 text-white text-xs px-3 py-1 rounded-full"
+          style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}>
           {idx + 1} / {images.length}
         </div>
       )}

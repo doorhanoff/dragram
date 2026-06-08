@@ -388,7 +388,7 @@ export default function App() {
     : <PostFeed key={`${postFeedKey}-${postFilter}`} query={postQuery} filter={postFilter} onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }} onCreatePost={() => setShowCreate(true)} />
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-bg">
+    <div className="h-full flex flex-col overflow-hidden bg-bg">
       {/* Desktop */}
       <div className="hidden md:flex flex-1 min-h-0">
         <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} onLogout={logout} onProfile={() => setShowMyProfile(true)} />
