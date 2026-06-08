@@ -52,6 +52,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   const [pendingAudio, setPending]    = useState<{ file: File; url: string } | null>(null)
   const [sendingAudio, setSendingAudio] = useState(false)
   const bottomRef   = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef     = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -59,7 +60,13 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   const isGroup     = (chat?.members?.length || 0) > 2
   const other       = chat?.members?.find(m => m.id !== userId)
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, uploading])
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    // Прямой скролл контейнера надёжнее scrollIntoView в Android WebView
+    // (особенно при открытой клавиатуре/смене высоты вьюпорта).
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
+  }, [messages, uploading, chatId])
 
   useEffect(() => { if (chatId) api.markRead(chatId).catch(() => {}) }, [chatId])
 
@@ -211,7 +218,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-[18px] py-[14px] flex flex-col gap-3">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto px-[18px] py-[14px] flex flex-col gap-3">
         {/* Load more */}
         {hasMore && messages.length >= 50 && (
           <button onClick={loadMore} disabled={loadingMore}
