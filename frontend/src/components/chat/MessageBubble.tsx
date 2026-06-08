@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import type { Message, Member } from '../../types'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
+import VideoLightbox from '../ui/VideoLightbox'
 
 function fmtTime(dt?: string): string {
   if (!dt) return ''
@@ -36,6 +37,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
   const isSent = (msg.writer || msg.sender_id) === userId
   const time   = fmtTime(msg.date || msg.created_at)
   const [lightbox, setLightbox] = useState(false)
+  const [videoOpen, setVideoOpen] = useState(false)
 
   // Левая часть: аватар в группе или пустой спейсер
   const leftSlot = !isSent && (
@@ -71,8 +73,13 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
     return (
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
-        <div className="relative">
-          <video src={msg.text} controls playsInline className="max-w-[260px] max-h-[320px] rounded-xl block bg-black" />
+        <div className="relative cursor-pointer" onClick={() => setVideoOpen(true)}>
+          <video src={msg.text} preload="metadata" playsInline muted className="max-w-[260px] max-h-[320px] rounded-xl block bg-black pointer-events-none" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-11 h-11 rounded-full bg-black/40 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+            </div>
+          </div>
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
               <span className="text-[10px] text-white/80">{time}</span>
@@ -80,6 +87,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
             </div>
           )}
         </div>
+        {videoOpen && <VideoLightbox src={msg.text} onClose={() => setVideoOpen(false)} />}
       </div>
     )
   }
