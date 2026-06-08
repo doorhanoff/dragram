@@ -17,6 +17,7 @@ import PostFeed          from './components/posts/PostFeed'
 import PostThread        from './components/posts/PostThread'
 import CreatePostModal   from './components/posts/CreatePostModal'
 import ProfileModal      from './components/ui/ProfileModal'
+import MyProfileModal    from './components/ui/MyProfileModal'
 
 import type { User, Chat, Message, NavSection } from './types'
 
@@ -72,6 +73,23 @@ export default function App() {
   const myPubKeyRef    = useRef<string | null>(null)  // base64 публичный ключ для safety number
   const chatsRef       = useRef<Chat[]>([])
   const userIdRef      = useRef<string | null>(null)
+
+  useEffect(() => {
+    Promise.all([import('@capacitor/status-bar'), import('@capacitor/core')]).then(
+      ([{ StatusBar, Style }, { Capacitor }]) => {
+        if (Capacitor.getPlatform() === 'android') {
+          // На Android edge-to-edge включён принудительно (targetSdk 35+),
+          // overlaysWebView ничего не меняет — резервируем место вручную.
+          // 24dp ~ стандартная высота статус-бара на Android (Pixel и большинство устройств).
+          StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
+          document.documentElement.style.setProperty('--status-bar-height', '24px')
+        } else {
+          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
+        }
+        StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+      }
+    ).catch(() => {})
+  }, [])
 
   useEffect(() => { chatsRef.current = chats }, [chats])
   useEffect(() => { userIdRef.current = user?.id || null }, [user])
@@ -371,7 +389,7 @@ export default function App() {
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-bg">
       {/* Desktop */}
       <div className="hidden md:flex flex-1 min-h-0">
-        <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} onLogout={logout} />
+        <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} onLogout={logout} onProfile={() => setShowMyProfile(true)} />
         {activeTab === 'chats' ? <>{chatPanel}{chatMain}</> : <>{postPanel}{postMain}</>}
       </div>
 
@@ -396,7 +414,7 @@ export default function App() {
       )}
 
       {showMyProfile && user && (
-        <ProfileModal userId={user.id} isMe={true} onClose={() => setShowMyProfile(false)} />
+        <MyProfileModal userId={user.id} onClose={() => setShowMyProfile(false)} onLogout={() => { setShowMyProfile(false); logout() }} />
       )}
 
     </div>

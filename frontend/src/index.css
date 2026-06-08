@@ -12,6 +12,10 @@
     height: 100dvh; /* точный размер с учётом адресной строки iOS Safari */
     overflow: hidden;
   }
+  #root {
+    padding-top: max(env(safe-area-inset-top, 0px), var(--status-bar-height, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   body { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
   button, input, textarea { font-family: inherit; }
   /* Предотвращаем авто-зум iOS Safari при фокусе на инпутах (срабатывает при font-size < 16px) */

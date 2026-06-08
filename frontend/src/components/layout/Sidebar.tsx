@@ -7,6 +7,7 @@ interface Props {
   active: NavSection
   onNavigate: (s: NavSection) => void
   onLogout: () => void
+  onProfile?: () => void
 }
 
 function NavBtn({ icon, isActive, onClick, title }: {
@@ -28,20 +29,20 @@ function NavBtn({ icon, isActive, onClick, title }: {
   )
 }
 
-export default function Sidebar({ user, active, onNavigate, onLogout }: Props) {
+export default function Sidebar({ user, active, onNavigate, onLogout, onProfile }: Props) {
   const initials = (user.name || '?').split(' ').slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
 
   return (
     <aside className="w-[62px] flex-shrink-0 bg-sidebar flex flex-col items-center py-3 gap-1">
       {/* Аватар пользователя */}
-      <div className="mb-3" title={user.name}>
+      <button className="mb-3 cursor-pointer" title="Профиль" onClick={() => onProfile?.()}>
         {user.image_url
           ? <img src={user.image_url} className="w-[34px] h-[34px] rounded-full object-cover" alt={user.name} />
           : <div className="w-[34px] h-[34px] rounded-full bg-accent flex items-center justify-center text-white select-none" style={{ fontSize: 13 }}>
               {initials}
             </div>
         }
-      </div>
+      </button>
 
       {/* Навигация */}
       <NavBtn icon={<IconMessage2 size={20} stroke={1.5} />}   isActive={active === 'chats'} onClick={() => onNavigate('chats')} title="Чаты" />
