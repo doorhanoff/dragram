@@ -123,6 +123,7 @@ export const api = {
   getUserPublicKey:(id)            => req('GET',  `/auth/users/${id}/public-key`),
   setChatKeys:     (id, keys)      => req('POST', `/chats/${id}/keys`, { keys }),
   getMyChatKey:    (id)            => req('GET',  `/chats/${id}/keys/me`),
+  updateProfile:   (data)          => req('PATCH', '/auth/me', data),
   uploadAvatar:    (file)          => {
     const fd = new FormData()
     fd.append('photo', file)

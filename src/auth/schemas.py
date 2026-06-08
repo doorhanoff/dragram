@@ -23,6 +23,11 @@ class CreateUser(BaseModel):
     description: str | None = None
 
 
+class UpdateProfileForm(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=50)
+    description: str | None = Field(default=None, max_length=200)
+
+
 class LoginForm(BaseModel):
     phone_number: RUPhone
     password: str = Field(min_length=8, max_length=50)

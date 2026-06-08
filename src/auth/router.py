@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Request, Upload
 from pydantic import BaseModel
 from .depends import get_auth_service, get_token_payload, get_current_user
 from .models import UsersOrm
-from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse
+from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm
 from .service import AuthService
 from src.jwt_auth.jwt_service import JWTError
 from src.core.rate_limit import make_rate_limiter
@@ -157,6 +157,17 @@ async def get_key_backup(
     if backup is None:
         raise HTTPException(status_code=404, detail="No key backup found")
     return {"key_backup": backup}
+
+
+@router.patch("/me", response_model=UserShortResponse)
+async def update_me(
+    form: UpdateProfileForm,
+    user: UsersOrm = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    await service.update_profile(user.id, form.name, form.description)
+    updated = await service.get_user_by_id(user.id)
+    return updated
 
 
 @router.post("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)

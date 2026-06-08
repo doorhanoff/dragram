@@ -56,6 +56,19 @@ class AuthRepository:
         await self.session.execute(stmt)
         await self.session.commit()
 
+    async def update_profile(self, user_id: uuid.UUID, name: str | None, description: str | None) -> None:
+        from sqlalchemy import update
+        values = {}
+        if name is not None:
+            values["name"] = name
+        if description is not None:
+            values["description"] = description
+        if not values:
+            return
+        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(**values)
+        await self.session.execute(stmt)
+        await self.session.commit()
+
     async def update_avatar(self, user_id: uuid.UUID, image_url: str) -> None:
         from sqlalchemy import update
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(image_url=image_url)

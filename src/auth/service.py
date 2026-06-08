@@ -73,6 +73,9 @@ class AuthService:
     async def set_active(self, user_id: uuid.UUID, active: bool) -> None:
         await self.repo.set_active(user_id, active)
 
+    async def update_profile(self, user_id: uuid.UUID, name: str | None, description: str | None) -> None:
+        await self.repo.update_profile(user_id, name, description)
+
     async def upload_avatar(self, user_id: uuid.UUID, file, s3) -> str:
         url = await s3.upload_file(file.file, file.content_type)
         await self.repo.update_avatar(user_id, url)
