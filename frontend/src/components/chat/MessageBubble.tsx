@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { Message, Member } from '../../types'
 import Avatar from '../ui/Avatar'
+import ImageLightbox from '../ui/ImageLightbox'
 
 function fmtTime(dt?: string): string {
   if (!dt) return ''
@@ -34,6 +35,7 @@ interface Props {
 export default function MessageBubble({ msg, userId, isGroup, senderMember }: Props) {
   const isSent = (msg.writer || msg.sender_id) === userId
   const time   = fmtTime(msg.date || msg.created_at)
+  const [lightbox, setLightbox] = useState(false)
 
   // Левая часть: аватар в группе или пустой спейсер
   const leftSlot = !isSent && (
@@ -50,7 +52,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
         {leftSlot}
         <div className="relative">
           <img src={msg.text} alt="" className="max-w-[220px] rounded-xl cursor-pointer block"
-            onClick={() => window.open(msg.text, '_blank')} />
+            onClick={() => setLightbox(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
               <span className="text-[10px] text-white/80">{time}</span>
@@ -58,6 +60,9 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
             </div>
           )}
         </div>
+        {lightbox && (
+          <ImageLightbox images={[msg.text]} startIndex={0} onClose={() => setLightbox(false)} />
+        )}
       </div>
     )
   }

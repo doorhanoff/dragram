@@ -83,10 +83,12 @@ export default function App() {
           // 24dp ~ стандартная высота статус-бара на Android (Pixel и большинство устройств).
           StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
           document.documentElement.style.setProperty('--status-bar-height', '24px')
+          StatusBar.setBackgroundColor({ color: '#3B3FCF' }).catch(() => {})
+          StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
         } else {
           StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
+          StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
         }
-        StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
       }
     ).catch(() => {})
   }, [])

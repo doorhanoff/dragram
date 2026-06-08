@@ -6,7 +6,7 @@
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { height: 100%; }
+  html { height: 100%; background: #3B3FCF; }
   body, #root {
     height: 100%;
     height: 100dvh; /* точный размер с учётом адресной строки iOS Safari */
@@ -14,7 +14,6 @@
   }
   #root {
     padding-top: max(env(safe-area-inset-top, 0px), var(--status-bar-height, 0px));
-    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   body { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
   button, input, textarea { font-family: inherit; }

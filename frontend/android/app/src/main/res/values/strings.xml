@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dragram</string>
+    <string name="title_activity_main">Dragram</string>
+    <string name="package_name">com.dragram.app</string>
+    <string name="custom_url_scheme">com.dragram.app</string>
+</resources>
