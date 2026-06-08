@@ -41,10 +41,11 @@ class S3Service:
         return self._build_url(key)
 
     async def delete_file(self, url: str) -> None:
-        """Удаляет файл из S3 по URL вида /media/uploads/uuid.ext"""
-        if not url or not url.startswith("/media/"):
+        """Удаляет файл из S3 по полному URL вида {endpoint}/{bucket}/uploads/uuid.ext"""
+        prefix = f"{settings.S3_ENDPOINT}/{self.bucket}/"
+        if not url or not url.startswith(prefix):
             return
-        key = url.removeprefix("/media/")
+        key = url.removeprefix(prefix)
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(
@@ -55,9 +56,8 @@ class S3Service:
             pass  # файл уже удалён или не существует — не критично
 
     def _build_url(self, key: str) -> str:
-        # Возвращаем относительный путь — Nginx проксирует /media/ → S3
-        # Так браузер загружает файлы с нашего домена, CORS не нужен
-        return f"/media/{key}"
+        # Прямая ссылка на объект в S3-совместимом хранилище (нет Nginx-прокси на Railway)
+        return f"{settings.S3_ENDPOINT}/{self.bucket}/{key}"
 
 
 s3_service = S3Service()
