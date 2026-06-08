@@ -44,8 +44,8 @@ async def login(credentials: LoginForm, response: Response, service: AuthService
     tokens = await service.login(credentials)
     if not tokens:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    response.set_cookie("token", tokens.access_token, httponly=True, samesite="lax")
-    response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax")
+    response.set_cookie("token", tokens.access_token, httponly=True, samesite="lax", max_age=tokens.expires_in)
+    response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax", max_age=tokens.refresh_expires_in)
 
     return {"ok": True, "access_token": tokens.access_token, "refresh_token": tokens.refresh_token}
 
@@ -85,8 +85,8 @@ async def refresh(request: Request, response: Response, service: AuthService = D
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
     if not tokens:
         raise HTTPException(status_code=401)
-    response.set_cookie("token",         tokens.access_token,  httponly=True, samesite="lax")
-    response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax")
+    response.set_cookie("token",         tokens.access_token,  httponly=True, samesite="lax", max_age=tokens.expires_in)
+    response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax", max_age=tokens.refresh_expires_in)
     return {"ok": True}
 
 
