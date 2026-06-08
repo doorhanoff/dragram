@@ -14,10 +14,6 @@ build/
 .env.local
 .env.*.local
 
-# Alembic
-alembic/versions/*.py
-!alembic/versions/.gitkeep
-
 # Media / uploads
 media/
 
