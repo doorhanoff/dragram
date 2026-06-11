@@ -53,6 +53,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   const [sendingAudio, setSendingAudio] = useState(false)
   const bottomRef   = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef     = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -240,11 +241,35 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           const isMine = (item.msg.writer || item.msg.sender_id) === userId
           const msgId  = item.msg.id || (item.msg as any)._id
           const isActive = activeMsg === item.key
+          const cancelLongPress = () => {
+            if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null }
+          }
           return (
             <div
               key={item.key}
               className="group relative"
-              onTouchStart={() => { if (isMine) setActiveMsg(prev => prev === item.key ? null : item.key) }}
+              onTouchStart={e => {
+                if (!isMine) return
+                const touch = e.touches[0]
+                cancelLongPress()
+                longPressRef.current = {
+                  x: touch.clientX,
+                  y: touch.clientY,
+                  timer: setTimeout(() => {
+                    setActiveMsg(prev => prev === item.key ? null : item.key)
+                    longPressRef.current = null
+                  }, 450),
+                }
+              }}
+              onTouchMove={e => {
+                if (!longPressRef.current) return
+                const touch = e.touches[0]
+                const dx = Math.abs(touch.clientX - longPressRef.current.x)
+                const dy = Math.abs(touch.clientY - longPressRef.current.y)
+                if (dx > 10 || dy > 10) cancelLongPress()
+              }}
+              onTouchEnd={cancelLongPress}
+              onTouchCancel={cancelLongPress}
               onClick={() => { if (activeMsg && !isMine) setActiveMsg(null) }}
             >
               <MessageBubble
@@ -262,7 +287,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                   className={[
                     'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white',
                     'flex items-center justify-center text-xs transition-all',
-                    isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100',
+                    isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto',
                   ].join(' ')}
                   title="Удалить"
                 >×</button>
