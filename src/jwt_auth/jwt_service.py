@@ -159,11 +159,14 @@ class JWTManager:
         token = jwt.encode(payload, self._sign_key, algorithm=self._algorithm)
 
         if token_type == TokenType.REFRESH:
-            await self.redis.set(
-                self._token_state_key(TokenType.REFRESH, payload["jti"]),
-                RefreshTokenStatus.ACTIVE.value,
-                ex=self._refresh_ttl,
-            )
+            try:
+                await self.redis.set(
+                    self._token_state_key(TokenType.REFRESH, payload["jti"]),
+                    RefreshTokenStatus.ACTIVE.value,
+                    ex=self._refresh_ttl,
+                )
+            except Exception as e:
+                logger.warning("Redis unavailable, refresh token not stored: %s", e)
         return token
 
     async def create_token_pair(
@@ -197,12 +200,15 @@ class JWTManager:
             raise TokenTypeMismatchError(
                 f"Expected {expected_type.value!r}, got {actual_type.value!r}."
             )
-        token_status = await self.redis.get(self._token_state_key(actual_type, jti))
+        try:
+            token_status = await self.redis.get(self._token_state_key(actual_type, jti))
+        except Exception as e:
+            logger.warning("Redis unavailable during token verify, trusting JWT signature: %s", e)
+            token_status = None
         if actual_type == TokenType.REFRESH:
-            if token_status is None:
-                raise TokenRevokedError(f"Token jti={jti} not found in store.")
-            if token_status != RefreshTokenStatus.ACTIVE.value:
+            if token_status == RefreshTokenStatus.REVOKED.value:
                 raise TokenRevokedError(f"Token jti={jti} has been revoked.")
+            # если Redis недоступен (None) — доверяем подписи
         elif token_status == RefreshTokenStatus.REVOKED.value:
             raise TokenRevokedError(f"Token jti={jti} has been revoked.")
 

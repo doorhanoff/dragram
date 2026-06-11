@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconMessage2, IconLayoutList, IconLogout } from '@tabler/icons-react'
+import { IconMessage2, IconLayoutList, IconLogout, IconPhoto } from '@tabler/icons-react'
 import type { NavSection, User } from '../../types'
 
 interface Props {
@@ -47,6 +47,7 @@ export default function Sidebar({ user, active, onNavigate, onLogout, onProfile 
       {/* Навигация */}
       <NavBtn icon={<IconMessage2 size={20} stroke={1.5} />}   isActive={active === 'chats'} onClick={() => onNavigate('chats')} title="Чаты" />
       <NavBtn icon={<IconLayoutList size={20} stroke={1.5} />}  isActive={active === 'posts'} onClick={() => onNavigate('posts')} title="Посты" />
+      <NavBtn icon={<IconPhoto size={20} stroke={1.5} />}       isActive={active === 'albums'} onClick={() => onNavigate('albums')} title="Альбомы" />
 
       {/* Выход внизу */}
       <div className="mt-auto">

@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconMessage2, IconLayoutList, IconUserCircle } from '@tabler/icons-react'
+import { IconMessage2, IconLayoutList, IconUserCircle, IconPhoto } from '@tabler/icons-react'
 import type { NavSection } from '../../types'
 
 interface BottomNavProps {
@@ -42,6 +42,7 @@ export default function BottomNav({ active, onNavigate, unread, onProfile }: Bot
     <nav className="bg-surface border-t border-border flex pb-safe flex-shrink-0">
       <Tab icon={<IconMessage2 size={22} stroke={1.5} />}    label="Чаты"     isActive={active === 'chats'} badge={unread} onClick={() => onNavigate('chats')} />
       <Tab icon={<IconLayoutList size={22} stroke={1.5} />}  label="Посты"    isActive={active === 'posts'} onClick={() => onNavigate('posts')} />
+      <Tab icon={<IconPhoto size={22} stroke={1.5} />}       label="Альбомы"  isActive={active === 'albums'} onClick={() => onNavigate('albums')} />
       <Tab icon={<IconUserCircle size={22} stroke={1.5} />}  label="Профиль"  isActive={false} onClick={() => onProfile?.()} />
     </nav>
   )

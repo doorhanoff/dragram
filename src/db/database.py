@@ -10,7 +10,7 @@ class Base(DeclarativeBase):
     pass
 
 
-connect_args = {}
+connect_args: dict = {"server_settings": {"search_path": "public"}}
 if db_settings.DB_SSL:
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False

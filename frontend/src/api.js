@@ -181,6 +181,31 @@ export const api = {
   addComment:     (postId, data)               => req('POST',   `/posts/${postId}/comments`, data),
   deleteComment:  (commentId)                  => req('DELETE', `/posts/comments/${commentId}`),
 
+  getAlbums:        ()             => req('GET',  '/albums/'),
+  getAlbum:         (id)           => req('GET',  `/albums/${id}`),
+  createAlbum:      (name)         => req('POST', '/albums/create', { name }),
+  addAlbumMember:   (id, userId)   => req('POST', `/albums/${id}/members`, { user_id: userId }),
+  removeAlbumMember:(id, userId)   => req('DELETE', `/albums/${id}/members/${userId}`),
+  getAlbumMaterials:(id)           => req('GET',  `/albums/${id}/materials`),
+  uploadAlbumMaterials: (id, files, onProgress) => {
+    return new Promise((resolve, reject) => {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${BASE}/albums/${id}/materials`)
+      if (IS_NATIVE) {
+        const token = getAccessToken()
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      } else {
+        xhr.withCredentials = true
+      }
+      if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)) }
+      xhr.onload  = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(String(xhr.status)))
+      xhr.onerror = () => reject(new Error('Ошибка сети'))
+      xhr.send(fd)
+    })
+  },
+
   uploadChatPhoto: (id, file) => {
     const fd = new FormData()
     fd.append('photo', file)

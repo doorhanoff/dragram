@@ -57,5 +57,24 @@ export interface Comment {
   created_at: string
 }
 
-export type NavSection = 'chats' | 'posts'
+export interface Album {
+  id: string
+  name: string
+  creator_id: string
+  created_at: string
+  cover?: string | null
+}
+
+export interface AlbumDetail extends Album {
+  members: Member[]
+}
+
+export interface AlbumMaterial {
+  id: string
+  link: string
+  published_by_id: string
+  published_at: string
+}
+
+export type NavSection = 'chats' | 'posts' | 'albums'
 export type MobileScreen = 'list' | 'detail'

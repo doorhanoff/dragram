@@ -18,8 +18,10 @@ import PostThread        from './components/posts/PostThread'
 import CreatePostModal   from './components/posts/CreatePostModal'
 import ProfileModal      from './components/ui/ProfileModal'
 import MyProfileModal    from './components/ui/MyProfileModal'
+import AlbumsList        from './components/albums/AlbumsList'
+import AlbumGallery      from './components/albums/AlbumGallery'
 
-import type { User, Chat, Message, NavSection } from './types'
+import type { User, Chat, Message, NavSection, Album } from './types'
 
 // ── Crypto helpers ────────────────────────────────────────────────────────
 
@@ -64,6 +66,8 @@ export default function App() {
   const [postQuery,     setPostQuery]     = useState('')
   const [postFilter,    setPostFilter]    = useState<'all'|'friends'|'saved'>('all')
   const [mobileScreen,  setMobileScreen]  = useState<'list'|'detail'>('list')
+  const [albums,        setAlbums]        = useState<Album[]>([])
+  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null)
 
   const wsRef          = useRef<WebSocket | null>(null)
   const activeChatRef  = useRef<string | null>(null)
@@ -198,6 +202,14 @@ export default function App() {
   const loadChats = useCallback(async () => {
     try { setChats(await api.getChats() || []) } catch {}
   }, [])
+
+  const loadAlbums = useCallback(async () => {
+    try { setAlbums(await api.getAlbums() || []) } catch {}
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'albums' && albums.length === 0) loadAlbums()
+  }, [activeTab, albums.length, loadAlbums])
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   const connectWS = useCallback((chatId: string) => {
@@ -387,24 +399,53 @@ export default function App() {
     ? <PostThread postId={activePostId} userId={user.id} onBack={() => { setActivePostId(null); setMobileScreen('list') }} />
     : <PostFeed key={`${postFeedKey}-${postFilter}`} query={postQuery} filter={postFilter} onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }} onCreatePost={() => setShowCreate(true)} />
 
+  const albumsPanel = (
+    <AlbumsList
+      albums={albums}
+      activeAlbumId={activeAlbumId}
+      onSelect={id => { setActiveAlbumId(id); setMobileScreen('detail') }}
+      onCreated={loadAlbums}
+    />
+  )
+
+  const albumsMain = activeAlbumId ? (
+    <AlbumGallery
+      albumId={activeAlbumId}
+      onBack={() => { setActiveAlbumId(null); setMobileScreen('list') }}
+      onChanged={loadAlbums}
+    />
+  ) : (
+    <div className="flex-1 hidden md:flex items-center justify-center text-muted text-sm">
+      Выберите альбом
+    </div>
+  )
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg">
       {/* Desktop */}
       <div className="hidden md:flex flex-1 min-h-0">
         <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} onLogout={logout} onProfile={() => setShowMyProfile(true)} />
-        {activeTab === 'chats' ? <>{chatPanel}{chatMain}</> : <>{postPanel}{postMain}</>}
+        {activeTab === 'chats' ? <>{chatPanel}{chatMain}</> : activeTab === 'posts' ? <>{postPanel}{postMain}</> : <>{albumsPanel}{albumsMain}</>}
       </div>
 
       {/* Mobile */}
       <div className="flex md:hidden flex-1 min-h-0 flex-col">
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {mobileScreen === 'list' ? (
-            activeTab === 'chats' ? chatPanel : (
+            activeTab === 'chats' ? chatPanel : activeTab === 'posts' ? (
               <PostFeed key={`${postFeedKey}-${postFilter}`} query={postQuery} filter={postFilter} onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }} onCreatePost={() => setShowCreate(true)} onQuery={setPostQuery} onFilter={setPostFilter} />
-            )
+            ) : albumsPanel
           ) : (
-            activeTab === 'chats' ? chatMain : (
+            activeTab === 'chats' ? chatMain : activeTab === 'posts' ? (
               <PostThread postId={activePostId} userId={user.id} onBack={() => { setActivePostId(null); setMobileScreen('list') }} />
+            ) : (
+              activeAlbumId && (
+                <AlbumGallery
+                  albumId={activeAlbumId}
+                  onBack={() => { setActiveAlbumId(null); setMobileScreen('list') }}
+                  onChanged={loadAlbums}
+                />
+              )
             )
           )}
         </div>
