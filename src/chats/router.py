@@ -66,6 +66,9 @@ async def get_chats(
         for member in getattr(chat, 'members', []):
             key_exists = await redis.exists(f"online:{member.id}")
             member.is_active = bool(key_exists)
+        chat.unread_count = sum(
+            1 for m in chat.messages if not m.is_read and m.sender_id != user.id
+        )
     return chats
 
 

@@ -22,6 +22,7 @@ export interface Chat {
   members: Member[]
   members_ids: string[]
   created_at: string
+  unread_count?: number
 }
 
 export interface Message {

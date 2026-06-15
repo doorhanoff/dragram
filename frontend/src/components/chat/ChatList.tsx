@@ -58,8 +58,16 @@ function ChatItem({ chat, myId, isActive, onClick, onAvatarClick }: ChatItemProp
           <span className={`text-md font-medium ellipsis ${isActive ? 'text-accent' : 'text-primary'}`}>{name}</span>
           <span className="text-xs text-[#ccc] flex-shrink-0">{fmtTime(chat.created_at)}</span>
         </div>
-        <div className="text-sm text-muted ellipsis">
-          {isGroup ? `${chat.members?.length || 0} участн.` : (other?.phone_number || '')}
+        <div className="flex items-center justify-between gap-1">
+          <div className={`text-sm ellipsis ${chat.unread_count ? 'text-primary font-medium' : 'text-muted'}`}>
+            {isGroup ? `${chat.members?.length || 0} участн.` : (other?.phone_number || '')}
+          </div>
+          {!!chat.unread_count && (
+            <span className="bg-accent text-white rounded-full px-1.5 leading-none flex-shrink-0"
+              style={{ fontSize: 11, minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {chat.unread_count > 99 ? '99+' : chat.unread_count}
+            </span>
+          )}
         </div>
       </div>
     </div>

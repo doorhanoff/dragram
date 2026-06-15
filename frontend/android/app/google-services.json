@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "137579340787",
+    "project_id": "dragram-7cc06",
+    "storage_bucket": "dragram-7cc06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:137579340787:android:6719b9e18d55792858a886",
+        "android_client_info": {
+          "package_name": "com.dragram.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlhbwfYOHWEc3076JzaYpVen2Zjrs7EmY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

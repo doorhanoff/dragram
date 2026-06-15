@@ -209,6 +209,13 @@ export default function App() {
     try { setChats(await api.getChats() || []) } catch {}
   }, [])
 
+  // Периодически обновляем список чатов, чтобы счётчики непрочитанных были актуальны
+  useEffect(() => {
+    if (!user) return
+    const id = setInterval(loadChats, 15000)
+    return () => clearInterval(id)
+  }, [user, loadChats])
+
   const loadAlbums = useCallback(async () => {
     try { setAlbums(await api.getAlbums() || []) } catch {}
   }, [])
@@ -272,6 +279,7 @@ export default function App() {
   // ── Open chat ─────────────────────────────────────────────────────────────
   const openChat = useCallback(async (chatId: string, chatObj?: Chat) => {
     setCurrentChatId(chatId); activeChatRef.current = chatId; setMobileScreen('detail')
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c))
 
     if (keyPairRef.current && !chatKeysRef.current.has(chatId)) {
       const chat = chatObj || chatsRef.current.find(c => c.id === chatId)
@@ -455,7 +463,8 @@ export default function App() {
             )
           )}
         </div>
-        <BottomNav active={activeTab} onNavigate={s => { setActiveTab(s); setMobileScreen('list') }} onProfile={() => setShowMyProfile(true)} />
+        <BottomNav active={activeTab} onNavigate={s => { setActiveTab(s); setMobileScreen('list') }} onProfile={() => setShowMyProfile(true)}
+          unread={chats.reduce((sum, c) => sum + (c.unread_count || 0), 0)} />
       </div>
 
       {showCreate && (

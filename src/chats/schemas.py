@@ -40,6 +40,7 @@ class ChatsResponse(BaseModel):
     members_ids: list[uuid.UUID]
     members: list[MemberShort]
     created_at: datetime.datetime
+    unread_count: int = 0
 
 
 class MessagesResponse(BaseModel):
