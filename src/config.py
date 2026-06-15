@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # SSL для облачных БД (Supabase требует)
     DB_SSL: bool = False
 
+    # Firebase Cloud Messaging (push-уведомления)
+    FCM_CREDENTIALS_JSON: str = ""
+
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
     @property

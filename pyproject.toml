@@ -16,4 +16,5 @@ dependencies = [
     "pydantic-extra-types>=2.11.1",
     "boto3>=1.43.16",
     "phonenumbers>=8.13.0",
+    "firebase-admin>=6.5.0",
 ]

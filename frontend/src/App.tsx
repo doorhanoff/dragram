@@ -100,6 +100,12 @@ export default function App() {
   useEffect(() => { chatsRef.current = chats }, [chats])
   useEffect(() => { userIdRef.current = user?.id || null }, [user])
 
+  // push-уведомления (только Android)
+  useEffect(() => {
+    if (!user) return
+    import('./push').then(({ initPushNotifications }) => initPushNotifications()).catch(() => {})
+  }, [user?.id])
+
   // auth:expired
   useEffect(() => {
     const h = () => {

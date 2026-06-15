@@ -20,6 +20,8 @@ from src.auth.repo import AuthRepository
 from src.db.database import async_session
 from src.jwt_auth.depends import get_jwt_manager
 from src.jwt_auth.jwt_service import JWTManager, JWTError
+from src.notifications.repo import NotificationsRepository
+from src.notifications.service import NotificationsService
 from src.redis.depends import get_redis_client
 from ..auth.models import UsersOrm
 
@@ -219,6 +221,24 @@ async def chat_websocket(
                     "is_read":     False,
                 }
                 await redis.publish(channel, json.dumps(payload_out))
+
+                recipient_ids = [m for m in chat.members_ids if m != user_id]
+                offline_ids = [rid for rid in recipient_ids if not await redis.exists(f"online:{rid}")]
+                if offline_ids:
+                    body = {
+                        "image": "\U0001F4F7 Фото",
+                        "video": "\U0001F3A5 Видео",
+                        "audio": "\U0001F3B5 Голосовое сообщение",
+                    }.get(data.get("type", "text"), data["text"][:100])
+                    async with async_session() as session:
+                        notif_repo = NotificationsRepository(session)
+                        notif_service = NotificationsService(notif_repo)
+                        await notif_service.notify_users(
+                            offline_ids,
+                            title=msg.sender.name if msg.sender else "Новое сообщение",
+                            body=body,
+                            data={"chat_id": str(chat_id), "event": "message"},
+                        )
 
 
     async def broadcast_messages():

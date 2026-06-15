@@ -12,6 +12,7 @@ from src.auth.models import UsersOrm  # noqa: F401
 from src.chats.models import ChatsOrm, MessagesOrm, ChatKeysOrm  # noqa: F401
 from src.posts.models import PostsOrm, CommentsOrm  # noqa: F401
 from src.albums.models import AlbumsOrm, AlbumMaterialsOrm  # noqa: F401
+from src.notifications.models import DeviceTokenOrm  # noqa: F401
 
 target_metadata = Base.metadata
 

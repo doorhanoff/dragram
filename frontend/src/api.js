@@ -212,6 +212,9 @@ export const api = {
     return req('POST', `/chats/${id}/photo`, fd, true)
   },
 
+  registerPushToken:   (token, platform = 'android') => req('POST', '/notifications/register', { token, platform }),
+  unregisterPushToken: (token)                        => req('POST', '/notifications/unregister', { token }),
+
   // Экспортируем для использования в WebSocket
   getAccessToken,
 }
