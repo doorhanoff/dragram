@@ -45,8 +45,9 @@ export default function VideoLightbox({ src, onClose }: Props) {
           controls
           autoPlay
           playsInline
+          preload="auto"
           className={`rounded-xl object-contain transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'}`}
-          style={{ maxWidth: '94vw', maxHeight: '82vh' }}
+          style={{ maxWidth: '94vw', maxHeight: '82vh', minWidth: 200, minHeight: 120 }}
         />
       </div>
     </div>
