@@ -34,6 +34,7 @@ export interface Message {
   writer?: string
   sender_name?: string | null
   is_read: boolean
+  thumbnail_url?: string | null
   date?: string
   created_at?: string
 }

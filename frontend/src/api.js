@@ -129,10 +129,11 @@ export const api = {
     fd.append('photo', file)
     return req('POST', '/auth/me/avatar', fd, true)
   },
-  uploadMedia: (id, file, onProgress) => {
+  uploadMedia: (id, file, onProgress, thumbnail) => {
     return new Promise((resolve, reject) => {
       const fd  = new FormData()
       fd.append('file', file)
+      if (thumbnail) fd.append('thumbnail', thumbnail)
       const xhr = new XMLHttpRequest()
       xhr.open('POST', `${BASE}/chats/${id}/upload`)
       if (IS_NATIVE) {

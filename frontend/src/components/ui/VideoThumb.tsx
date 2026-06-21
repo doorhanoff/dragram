@@ -2,27 +2,27 @@ import React, { useRef } from 'react'
 
 interface Props {
   src: string
+  poster?: string | null
   className?: string
   onClick?: () => void
 }
 
-export default function VideoThumb({ src, className, onClick }: Props) {
+export default function VideoThumb({ src, poster, className, onClick }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-
-  const handleMetadata = () => {
-    const v = videoRef.current
-    if (v) v.currentTime = 0.01
-  }
 
   return (
     <div className={`relative cursor-pointer ${className ?? ''}`} onClick={onClick}>
       <video
         ref={videoRef}
         src={src}
+        poster={poster ?? undefined}
         preload="metadata"
         playsInline
         muted
-        onLoadedMetadata={handleMetadata}
+        onLoadedMetadata={() => {
+          // fallback: seek to first frame if no poster provided
+          if (!poster && videoRef.current) videoRef.current.currentTime = 0.01
+        }}
         className="max-w-[260px] max-h-[320px] rounded-xl block bg-[#1a1a2e] pointer-events-none"
       />
       <div className="absolute inset-0 flex items-center justify-center">

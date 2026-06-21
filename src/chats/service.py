@@ -100,7 +100,7 @@ class ChatsService:
             await self.s3.delete_file(deleted.text)
         return deleted is not None
 
-    async def send_media_message(self, user: UsersOrm, file: UploadFile, chat: ChatsOrm):
+    async def send_media_message(self, user: UsersOrm, file: UploadFile, chat: ChatsOrm, thumbnail=None):
         if file.content_type not in ALLOWED_MEDIA_TYPES:
             raise InvalidFileType
         url = await self.s3.upload_file(file.file, file.content_type)
@@ -108,8 +108,14 @@ class ChatsService:
         if file.content_type.startswith("video/"):   msg_type = "video"
         elif file.content_type.startswith("audio/"): msg_type = "audio"
         else:                                         msg_type = "image"
-        message = MessageSchema(text=url, writer=user.id, type=msg_type)
-        message_db = MessageDbSchema(text=url, type=msg_type, sender_id=user.id, chat_id=chat.id)
+        thumbnail_url = None
+        if thumbnail and msg_type == "video":
+            try:
+                thumbnail_url = await self.s3.upload_file(thumbnail.file, "image/jpeg")
+            except Exception:
+                pass
+        message = MessageSchema(text=url, writer=user.id, type=msg_type, thumbnail_url=thumbnail_url)
+        message_db = MessageDbSchema(text=url, type=msg_type, thumbnail_url=thumbnail_url, sender_id=user.id, chat_id=chat.id)
         await self.repo.create_message(message_db)
         await self.redis.publish(channel, message.model_dump_json())
         return url

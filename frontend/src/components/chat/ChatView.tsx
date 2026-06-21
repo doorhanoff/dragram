@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import {
   IconPaperclip,
   IconSend, IconMicrophone, IconPlayerStop, IconArrowLeft, IconChevronUp,
@@ -82,13 +82,36 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
+  function getVideoThumbnail(file: File): Promise<File | null> {
+    return new Promise(resolve => {
+      const video = document.createElement('video')
+      const url = URL.createObjectURL(file)
+      video.src = url; video.muted = true; video.playsInline = true; video.preload = 'metadata'
+      const cleanup = () => URL.revokeObjectURL(url)
+      video.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas')
+          const w = Math.min(video.videoWidth, 480)
+          const h = Math.round(w * video.videoHeight / video.videoWidth)
+          canvas.width = w; canvas.height = h
+          canvas.getContext('2d')!.drawImage(video, 0, 0, w, h)
+          canvas.toBlob(blob => { cleanup(); resolve(blob ? new File([blob], 'thumb.jpg', { type: 'image/jpeg' }) : null) }, 'image/jpeg', 0.8)
+        } catch { cleanup(); resolve(null) }
+      }, { once: true })
+      video.addEventListener('error', () => { cleanup(); resolve(null) }, { once: true })
+      video.addEventListener('loadedmetadata', () => { video.currentTime = 0.1 }, { once: true })
+      video.load()
+    })
+  }
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !chatId) return
     e.target.value = ''
     setUploading({ file, progress: 0 })
     try {
-      await api.uploadMedia(chatId, file, (pct: number) => setUploading(prev => prev ? { ...prev, progress: pct } : null))
+      const thumbnail = file.type.startsWith('video/') ? await getVideoThumbnail(file) : null
+      await api.uploadMedia(chatId, file, (pct: number) => setUploading(prev => prev ? { ...prev, progress: pct } : null), thumbnail)
     } catch (err: any) { alert('Ошибка: ' + err.message) }
     finally { setUploading(null) }
   }

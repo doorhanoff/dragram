@@ -266,12 +266,13 @@ async def chat_websocket(
 @router.post("/{chat_id}/upload", response_model=dict)
 async def send_photo(
     file: UploadFile = File(...),
+    thumbnail: UploadFile | None = File(None),
     chat: ChatsOrm = Depends(get_chat),
     user: UsersOrm = Depends(get_current_user),
     service: ChatsService = Depends(get_chats_service),
 ):
     try:
-        url = await service.send_media_message(user=user, file=file, chat=chat)
+        url = await service.send_media_message(user=user, file=file, chat=chat, thumbnail=thumbnail)
         return {"url": url}
     except InvalidFileType:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,

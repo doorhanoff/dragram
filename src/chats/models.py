@@ -25,6 +25,7 @@ class MessagesOrm(Base):
 
     text: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[str] = mapped_column(String(10), default="text", server_default="text")
+    thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chat_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('chats.id'))
     sender_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))

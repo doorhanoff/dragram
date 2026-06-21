@@ -75,7 +75,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <VideoThumb src={msg.text} onClick={() => setVideoOpen(true)} />
+          <VideoThumb src={msg.text} poster={msg.thumbnail_url} onClick={() => setVideoOpen(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
               <span className="text-[10px] text-white/80">{time}</span>

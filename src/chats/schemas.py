@@ -48,6 +48,7 @@ class MessagesResponse(BaseModel):
     id: uuid.UUID
     text: str
     type: str
+    thumbnail_url: str | None = None
     sender_id: uuid.UUID
     sender_name: str | None = None
     is_read: bool
@@ -59,6 +60,7 @@ class MessagesResponse(BaseModel):
             id=msg.id,
             text=msg.text,
             type=msg.type,
+            thumbnail_url=getattr(msg, 'thumbnail_url', None),
             sender_id=msg.sender_id,
             sender_name=msg.sender.name if msg.sender else None,
             is_read=msg.is_read,
@@ -71,6 +73,7 @@ class MessageSchema(BaseModel):
     text: str
     writer: uuid.UUID
     type: Literal["text", "image", "video", "audio"] = "text"
+    thumbnail_url: str | None = None
     date: datetime.datetime = Field(default_factory=datetime.datetime.now)
     sender_name: str | None = None
 
@@ -78,6 +81,7 @@ class MessageSchema(BaseModel):
 class MessageDbSchema(BaseModel):
     text: str
     type: Literal["text", "image", "video", "audio"] = "text"
+    thumbnail_url: str | None = None
     chat_id: uuid.UUID
     sender_id: uuid.UUID
     is_read: bool = Field(default=False)
