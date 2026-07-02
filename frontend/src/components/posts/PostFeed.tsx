@@ -44,16 +44,16 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
   return (
     <div className="flex-1 overflow-y-auto bg-bg">
       {/* Header */}
-      <div className="bg-surface border-b border-border flex-shrink-0 sticky top-0 z-10">
-        <div className="flex items-center px-5 py-3">
-          <span className="text-lg font-medium text-primary flex-1">
-            {query ? `Поиск: ${query}` : 'Все посты'}
+      <div className="bg-bg flex-shrink-0 sticky top-0 z-10">
+        <div className="flex items-center px-5 pt-5 pb-2">
+          <span className="text-3xl font-black text-primary tracking-tight flex-1">
+            {query ? `Поиск: ${query}` : 'Посты'}
           </span>
           <button
             onClick={onCreatePost}
-            className="flex items-center gap-1.5 bg-accent text-white text-base font-medium px-3 py-[6px] rounded-lg transition-colors hover:bg-accent-text"
+            className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent text-md font-extrabold px-4 py-[9px] rounded-2xl shadow-pop transition-opacity hover:opacity-90"
           >
-            <IconPlus size={14} stroke={2} />
+            <IconPlus size={17} stroke={2.4} />
             <span className="hidden sm:inline">Новый пост</span>
             <span className="sm:hidden">Пост</span>
           </button>
@@ -61,32 +61,32 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
 
         {/* Мобильный поиск + фильтры — показываем только когда есть колбэки (т.е. на мобильном) */}
         {(onQuery || onFilter) && (
-          <div className="px-4 pb-3 flex flex-col gap-2 md:hidden">
+          <div className="px-5 pb-3 flex flex-col gap-2.5 md:hidden">
             {onQuery && (
-              <div className="flex items-center gap-2 bg-bg rounded-lg px-3 py-2">
-                <IconSearch size={14} stroke={1.5} className="text-muted flex-shrink-0" />
+              <div className="flex items-center gap-2.5 bg-surface rounded-full px-[18px] h-[46px] shadow-soft">
+                <IconSearch size={18} stroke={1.8} className="text-muted flex-shrink-0" />
                 <input
                   value={query}
                   onChange={e => onQuery(e.target.value)}
                   placeholder="Поиск по постам"
-                  className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted"
+                  className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted font-semibold text-md"
                 />
               </div>
             )}
             {onFilter && (
               <div className="flex gap-2">
                 {([
-                  { id: 'all',     icon: <IconWorld size={13} stroke={1.5} />,    label: 'Все' },
-                  { id: 'friends', icon: <IconUsers size={13} stroke={1.5} />,    label: 'Друзья' },
-                  { id: 'saved',   icon: <IconBookmark size={13} stroke={1.5} />, label: 'Сохранённые' },
+                  { id: 'all',     icon: <IconWorld size={14} stroke={1.8} />,    label: 'Все' },
+                  { id: 'friends', icon: <IconUsers size={14} stroke={1.8} />,    label: 'Друзья' },
+                  { id: 'saved',   icon: <IconBookmark size={14} stroke={1.8} />, label: 'Сохранённые' },
                 ] as const).map(f => (
                   <button
                     key={f.id}
                     onClick={() => onFilter(f.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-extrabold transition-colors ${
                       filter === f.id
-                        ? 'bg-accent text-white'
-                        : 'bg-bg text-muted hover:text-primary'
+                        ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent'
+                        : 'bg-surface text-muted shadow-soft hover:text-primary'
                     }`}
                   >
                     {f.icon}{f.label}

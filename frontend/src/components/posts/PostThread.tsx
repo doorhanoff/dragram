@@ -73,17 +73,17 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
       {/* Header */}
-      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 py-3 flex-shrink-0">
-        <button onClick={onBack} className="w-[30px] h-[30px] rounded-[7px] flex items-center justify-center text-accent hover:bg-bg transition-colors">
-          <IconArrowLeft size={18} stroke={1.5} />
+      <div className="bg-bg flex items-center gap-3 px-4 py-4 flex-shrink-0">
+        <button onClick={onBack} className="text-accent hover:opacity-70 transition-opacity">
+          <IconArrowLeft size={24} stroke={2.4} />
         </button>
-        <span className="text-lg font-medium text-primary ellipsis flex-1">{post.title}</span>
+        <span className="text-xl font-extrabold text-primary ellipsis flex-1">{post.title}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-4">
           {/* Post card */}
-          <div className="bg-surface border border-[#E0E0E8] rounded-xl overflow-hidden">
+          <div className="bg-surface border border-border rounded-card overflow-hidden">
             {/* Author */}
             <div className="flex items-center gap-2 px-4 pt-4 pb-2">
               <Avatar name={post.created_by?.name} id={post.created_by_id} imageUrl={post.created_by?.image_url} size={34} />
@@ -120,7 +120,7 @@ export default function PostThread({ postId, userId, onBack }: Props) {
           </div>
 
           {/* Comments */}
-          <div className="bg-surface border border-[#E0E0E8] rounded-xl overflow-hidden">
+          <div className="bg-surface border border-border rounded-card overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A0A0B0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -151,19 +151,19 @@ export default function PostThread({ postId, userId, onBack }: Props) {
                 placeholder={replyTo ? `Ответить ${replyTo.created_by?.name || ''}…` : 'Написать комментарий…'}
                 rows={1}
                 autoFocus={!!replyTo}
-                className="flex-1 bg-bg rounded-lg px-3 py-2 text-md text-primary outline-none resize-none placeholder:text-muted border border-transparent focus:border-accent transition-colors"
+                className="flex-1 bg-bg rounded-2xl px-4 py-2.5 text-md font-semibold text-primary outline-none resize-none placeholder:text-muted border border-transparent focus:border-accent transition-colors"
               />
               <button
                 onClick={send}
                 disabled={!text.trim() || sending}
-                className="w-8 h-8 rounded-[9px] bg-accent flex items-center justify-center text-white disabled:opacity-40 transition-opacity flex-shrink-0"
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0"
               >
-                <IconSend size={14} stroke={1.5} />
+                <IconSend size={15} stroke={1.5} />
               </button>
             </div>
 
             {/* Comment list */}
-            <div className="divide-y divide-[#F0F0F4]">
+            <div className="divide-y divide-border">
               {comments.map(c => {
                 const isCActive = activeComment === c.id
                 return (

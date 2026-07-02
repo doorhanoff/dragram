@@ -46,25 +46,26 @@ function ChatItem({ chat, myId, isActive, onClick, onAvatarClick }: ChatItemProp
     <div
       onClick={onClick}
       className={[
-        'flex items-center gap-2 px-[9px] py-[7px] mx-[5px] my-px rounded-lg cursor-pointer transition-colors',
-        isActive ? 'bg-accent-light' : 'hover:bg-bg',
+        'flex items-center gap-3.5 px-3 py-[11px] mx-1.5 my-px rounded-2xl cursor-pointer transition-colors',
+        isActive ? 'shadow-soft' : 'hover:bg-bg',
       ].join(' ')}
+      style={isActive ? { background: 'var(--surface2)' } : undefined}
     >
       <div onClick={e => { e.stopPropagation(); onAvatarClick() }} className="cursor-pointer">
-        <Avatar name={name} id={chat.id} imageUrl={imgUrl} isActive={isOnline} size={34} />
+        <Avatar name={name} id={chat.id} imageUrl={imgUrl} isActive={isOnline} size={52} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-1">
-          <span className={`text-md font-medium ellipsis ${isActive ? 'text-accent' : 'text-primary'}`}>{name}</span>
-          <span className="text-xs text-[#ccc] flex-shrink-0">{fmtTime(chat.created_at)}</span>
+          <span className={`text-lg font-extrabold ellipsis ${isActive ? 'text-accent' : 'text-primary'}`}>{name}</span>
+          <span className="text-sm font-bold text-muted flex-shrink-0">{fmtTime(chat.created_at)}</span>
         </div>
-        <div className="flex items-center justify-between gap-1">
-          <div className={`text-sm ellipsis ${chat.unread_count ? 'text-primary font-medium' : 'text-muted'}`}>
+        <div className="flex items-center justify-between gap-1 mt-0.5">
+          <div className={`text-md ellipsis ${chat.unread_count ? 'text-primary font-bold' : 'text-muted font-semibold'}`}>
             {isGroup ? `${chat.members?.length || 0} участн.` : (other?.phone_number || '')}
           </div>
           {!!chat.unread_count && (
-            <span className="bg-accent text-white rounded-full px-1.5 leading-none flex-shrink-0"
-              style={{ fontSize: 11, minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="bg-badge text-onAccent rounded-full px-1.5 leading-none flex-shrink-0 font-extrabold"
+              style={{ fontSize: 12, minWidth: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {chat.unread_count > 99 ? '99+' : chat.unread_count}
             </span>
           )}
@@ -101,27 +102,26 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
 
   return (
     <>
-      <div className="w-full md:w-[230px] flex-1 md:flex-shrink-0 bg-surface border-r border-border flex flex-col">
+      <div className="w-full md:w-[280px] flex-1 md:flex-shrink-0 bg-surface md:border-r border-border flex flex-col">
         {/* Header */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-medium text-primary">Чаты</h2>
+        <div className="px-5 pt-5 pb-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-3xl font-black text-primary tracking-tight">Чаты</h2>
             <button
               onClick={() => setShowGroup(true)}
               title="Новая группа"
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:bg-bg hover:text-accent transition-colors"
+              className="w-[42px] h-[42px] rounded-full bg-bg flex items-center justify-center text-accent shadow-soft hover:opacity-80 transition-opacity"
             >
-              <IconUsersGroup size={16} stroke={1.5} />
+              <IconUsersGroup size={20} stroke={1.8} />
             </button>
           </div>
-          <div className="flex items-center gap-2 bg-bg rounded-lg px-3 py-[7px]">
-            <IconSearch size={14} stroke={1.5} className="text-[#bbb] flex-shrink-0" />
+          <div className="flex items-center gap-2.5 bg-bg rounded-full px-[18px] h-[46px] shadow-soft">
+            <IconSearch size={18} stroke={1.8} className="text-muted flex-shrink-0" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Поиск"
-              className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted"
-              style={{ fontSize: 12 }}
+              className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted font-semibold text-md"
             />
           </div>
         </div>
@@ -133,13 +133,13 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
               {searching && <p className="text-xs text-muted px-4 py-2">Поиск…</p>}
               {searchUsers.map(u => (
                 <div key={u.id} onClick={() => { onStartChat(u.id); setQuery('') }}
-                  className="flex items-center gap-2 px-[9px] py-[7px] mx-[5px] my-px rounded-lg cursor-pointer hover:bg-bg transition-colors">
+                  className="flex items-center gap-3.5 px-3 py-[9px] mx-1.5 my-px rounded-2xl cursor-pointer hover:bg-bg transition-colors">
                   <div onClick={e => { e.stopPropagation(); setProfileId(u.id) }}>
-                    <Avatar name={u.name} id={u.id} imageUrl={u.image_url} isActive={u.is_active} size={34} />
+                    <Avatar name={u.name} id={u.id} imageUrl={u.image_url} isActive={u.is_active} size={46} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-md font-medium text-primary ellipsis">{u.name}</div>
-                    <div className="text-sm text-muted ellipsis">{u.phone_number}</div>
+                    <div className="text-lg font-extrabold text-primary ellipsis">{u.name}</div>
+                    <div className="text-md font-semibold text-muted ellipsis">{u.phone_number}</div>
                   </div>
                 </div>
               ))}
@@ -149,7 +149,7 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
             <>
               {personal.length > 0 && (
                 <>
-                  <p className="text-xs font-medium text-[#bbb] uppercase tracking-wider px-4 pt-3 pb-1">Личные</p>
+                  <p className="text-xs font-extrabold text-muted uppercase tracking-widest px-4 pt-3 pb-1.5">Личные</p>
                   {personal.map(c => (
                     <ChatItem key={c.id} chat={c} myId={user.id} isActive={c.id === activeChatId}
                       onClick={() => onOpenChat(c.id)}
@@ -163,7 +163,7 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
               )}
               {groups.length > 0 && (
                 <>
-                  <p className="text-xs font-medium text-[#bbb] uppercase tracking-wider px-4 pt-3 pb-1">Группы</p>
+                  <p className="text-xs font-extrabold text-muted uppercase tracking-widest px-4 pt-3 pb-1.5">Группы</p>
                   {groups.map(c => (
                     <ChatItem key={c.id} chat={c} myId={user.id} isActive={c.id === activeChatId}
                       onClick={() => onOpenChat(c.id)}

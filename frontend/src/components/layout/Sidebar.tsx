@@ -18,10 +18,10 @@ function NavBtn({ icon, isActive, onClick, title }: {
       title={title}
       onClick={onClick}
       className={[
-        'w-[38px] h-[38px] rounded-[10px] flex items-center justify-center transition-colors',
+        'w-[40px] h-[40px] rounded-2xl flex items-center justify-center transition-colors',
         isActive
-          ? 'bg-accent text-white'
-          : 'text-[#6B6B8A] hover:bg-[#24243E] hover:text-[#aaaacc]',
+          ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent shadow-pop'
+          : 'text-white/50 hover:bg-white/10 hover:text-white/80',
       ].join(' ')}
     >
       {icon}
@@ -33,12 +33,12 @@ export default function Sidebar({ user, active, onNavigate, onLogout, onProfile 
   const initials = (user.name || '?').split(' ').slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
 
   return (
-    <aside className="w-[62px] flex-shrink-0 bg-sidebar flex flex-col items-center py-3 gap-1">
+    <aside className="w-[68px] flex-shrink-0 bg-sidebar flex flex-col items-center py-4 gap-1.5">
       {/* Аватар пользователя */}
       <button className="mb-3 cursor-pointer" title="Профиль" onClick={() => onProfile?.()}>
         {user.image_url
-          ? <img src={user.image_url} className="w-[34px] h-[34px] rounded-full object-cover" alt={user.name} />
-          : <div className="w-[34px] h-[34px] rounded-full bg-accent flex items-center justify-center text-white select-none" style={{ fontSize: 13 }}>
+          ? <img src={user.image_url} className="w-[38px] h-[38px] rounded-full object-cover" alt={user.name} />
+          : <div className="w-[38px] h-[38px] rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent font-extrabold select-none" style={{ fontSize: 14 }}>
               {initials}
             </div>
         }

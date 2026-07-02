@@ -190,21 +190,21 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg">
       {/* Header */}
-      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 pb-3 flex-shrink-0" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)' }}>
+      <div className="bg-bg flex items-center gap-3 px-4 pb-3 flex-shrink-0" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)' }}>
         {onBack && (
-          <button onClick={onBack} className="w-[30px] h-[30px] rounded-[7px] flex items-center justify-center text-accent hover:bg-bg transition-colors md:hidden">
-            <IconArrowLeft size={18} stroke={1.5} />
+          <button onClick={onBack} className="text-accent hover:opacity-70 transition-opacity md:hidden">
+            <IconArrowLeft size={24} stroke={2.4} />
           </button>
         )}
         <div onClick={() => { if (!isGroup && other) setProfileId(other.id) }} className={!isGroup ? 'cursor-pointer' : ''}>
-          <Avatar name={title} id={chatId} imageUrl={imgUrl} isActive={isOnline} size={34} />
+          <Avatar name={title} id={chatId} imageUrl={imgUrl} isActive={isOnline} size={42} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-lg font-medium text-primary ellipsis">{title}</div>
+          <div className="text-lg font-extrabold text-primary ellipsis">{title}</div>
           {isOnline && (
             <div className="flex items-center gap-1">
               <span className="w-[5px] h-[5px] rounded-full bg-online" />
-              <span className="text-xs text-online">онлайн</span>
+              <span className="text-sm font-bold text-online">онлайн</span>
             </div>
           )}
         </div>
@@ -221,14 +221,15 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       ) : safetyNumber && (
         <>
           <div
-            className="border-b border-border text-xs px-4 py-1.5 flex items-center gap-2 flex-shrink-0 cursor-pointer hover:bg-bg transition-colors"
+            className="text-sm px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer transition-colors"
+            style={{ background: 'var(--surface2)', color: '#3E8E5A' }}
             onClick={() => setShowSafety(s => !s)}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            <span className="text-green-600 font-medium">Сквозное шифрование включено</span>
-            <span className="text-muted ml-auto">{showSafety ? '▲' : '▼'} Safety Number</span>
+            <span className="font-bold">Сквозное шифрование включено</span>
+            <span className="opacity-70 font-semibold">{showSafety ? '▲' : '▼'} Safety Number</span>
           </div>
           {showSafety && (
             <div className="bg-bg border-b border-border px-4 py-3 flex-shrink-0">
@@ -261,10 +262,8 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
         {items.map(item => {
           if (item.type === 'divider') {
             return (
-              <div key={item.key} className="flex items-center gap-3 my-1">
-                <div className="flex-1 h-px bg-[#E0E0E8]" />
-                <span className="text-xs text-[#bbb] whitespace-nowrap">{item.day}</span>
-                <div className="flex-1 h-px bg-[#E0E0E8]" />
+              <div key={item.key} className="flex justify-center my-1">
+                <span className="text-xs font-extrabold text-muted whitespace-nowrap bg-surface2 px-3.5 py-1 rounded-full">{item.day}</span>
               </div>
             )
           }
@@ -337,47 +336,47 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       </div>
 
       {/* Input */}
-      <div className="bg-surface border-t border-border px-[14px] py-[10px] flex items-end gap-2 flex-shrink-0">
+      <div className="bg-bg px-[14px] py-[10px] flex items-end gap-2.5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         {pendingAudio ? (
           <>
             <audio src={pendingAudio.url} controls className="flex-1 h-9" />
             <button onClick={() => { URL.revokeObjectURL(pendingAudio.url); setPending(null) }}
-              className="w-7 h-7 rounded-full bg-red-50 text-red-400 flex items-center justify-center text-xs">×</button>
+              className="w-8 h-8 rounded-full bg-red-50 text-red-400 flex items-center justify-center text-xs">×</button>
             <button onClick={sendAudio} disabled={sendingAudio}
-              className="w-8 h-8 rounded-[9px] bg-accent flex items-center justify-center text-white disabled:opacity-50">
-              <IconSend size={15} stroke={1.5} />
+              className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent shadow-pop disabled:opacity-50">
+              <IconSend size={18} stroke={1.5} />
             </button>
           </>
         ) : (
           <>
-            <label className={`w-7 h-7 flex items-center justify-center cursor-pointer transition-colors ${uploading ? 'text-muted pointer-events-none opacity-40' : 'text-muted hover:text-accent'}`}>
-              <IconPaperclip size={18} stroke={1.5} />
+            <label className={`text-muted flex items-center justify-center cursor-pointer transition-colors flex-shrink-0 ${uploading ? 'pointer-events-none opacity-40' : 'hover:text-accent'}`}>
+              <IconPaperclip size={24} stroke={2} />
               <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime,audio/*" hidden onChange={handleFile} />
             </label>
-            <div className="flex-1 bg-bg rounded-[9px] flex items-end gap-1 px-3 py-[7px]">
+            <div className="flex-1 bg-surface rounded-[22px] flex items-end gap-1 pl-[18px] pr-2 py-[6px] shadow-soft">
               <textarea
                 ref={textareaRef}
                 value={text}
                 onChange={e => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px' }}
                 onKeyDown={onKey}
-                placeholder="Написать сообщение…"
+                placeholder="Сообщение…"
                 rows={1}
                 disabled={!hasChatKey}
-                className="flex-1 bg-transparent outline-none resize-none text-md text-primary placeholder:text-muted max-h-[100px] disabled:cursor-not-allowed"
+                className="flex-1 bg-transparent outline-none resize-none text-lg font-semibold text-primary placeholder:text-muted max-h-[100px] disabled:cursor-not-allowed py-1.5"
               />
               <button
                 onClick={toggleRecord}
-                className={`w-7 h-7 flex items-center justify-center transition-colors flex-shrink-0 ${recording ? 'text-red-500' : 'text-muted hover:text-accent'}`}
+                className={`w-8 h-8 flex items-center justify-center transition-colors flex-shrink-0 ${recording ? 'text-red-500' : 'text-muted hover:text-accent'}`}
               >
-                {recording ? <IconPlayerStop size={16} stroke={1.5} /> : <IconMicrophone size={16} stroke={1.5} />}
+                {recording ? <IconPlayerStop size={19} stroke={1.8} /> : <IconMicrophone size={19} stroke={1.8} />}
               </button>
             </div>
             <button
               onClick={send}
               disabled={!text.trim() || !hasChatKey}
-              className="w-8 h-8 rounded-[9px] bg-accent flex items-center justify-center text-white disabled:opacity-40 transition-opacity flex-shrink-0"
+              className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0 shadow-pop"
             >
-              <IconSend size={15} stroke={1.5} />
+              <IconSend size={18} stroke={1.5} />
             </button>
           </>
         )}

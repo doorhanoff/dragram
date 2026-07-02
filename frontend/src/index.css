@@ -1,12 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root, [data-palette="hearth"] {
+    --bg:#FAF4EC; --surface:#FFFFFF; --surface2:#F6DDC9; --text:#3A2A1E; --muted:#9C8770;
+    --accent:#D9824E; --accent2:#E89B6A; --on-accent:#FFFFFF; --border:#F0E4D4;
+    --nav:rgba(255,255,255,.85); --badge:#D9824E; --bubble-in:#FFFFFF; --bubble-in-text:#3A2A1E;
+    --shadow:rgba(120,70,30,.14); --sidebar:#2A2118;
+  }
+  [data-palette="hearth"][data-theme="dark"] {
+    --bg:#211C18; --surface:#2E2823; --surface2:#3A3024; --text:#F1E7DC; --muted:#9A8B79;
+    --accent:#E89B6A; --accent2:#DD8453; --on-accent:#2A1A10; --border:#332B23;
+    --nav:rgba(38,32,26,.92); --badge:#E89B6A; --bubble-in:#2E2823; --bubble-in-text:#F1E7DC;
+    --shadow:rgba(0,0,0,.45); --sidebar:#171310;
+  }
+  [data-palette="forest"] {
+    --bg:#F0F4EE; --surface:#FFFFFF; --surface2:#DEE9D7; --text:#2C342A; --muted:#7E8C76;
+    --accent:#6F8F5C; --accent2:#88A876; --on-accent:#FFFFFF; --border:#E2EADC;
+    --nav:rgba(255,255,255,.85); --badge:#6F8F5C; --bubble-in:#FFFFFF; --bubble-in-text:#2C342A;
+    --shadow:rgba(60,90,50,.14); --sidebar:#1E241B;
+  }
+  [data-palette="forest"][data-theme="dark"] {
+    --bg:#1B211A; --surface:#283024; --surface2:#344029; --text:#ECF1E8; --muted:#8FA083;
+    --accent:#88A876; --accent2:#6F8F5C; --on-accent:#16200F; --border:#2E382A;
+    --nav:rgba(32,40,28,.92); --badge:#88A876; --bubble-in:#283024; --bubble-in-text:#ECF1E8;
+    --shadow:rgba(0,0,0,.45); --sidebar:#141812;
+  }
+  [data-palette="sky"] {
+    --bg:#F1F5F7; --surface:#FFFFFF; --surface2:#DDE9EE; --text:#283238; --muted:#7C8C94;
+    --accent:#5E89A0; --accent2:#7FA6BA; --on-accent:#FFFFFF; --border:#E2EBEF;
+    --nav:rgba(255,255,255,.85); --badge:#5E89A0; --bubble-in:#FFFFFF; --bubble-in-text:#283238;
+    --shadow:rgba(50,80,95,.14); --sidebar:#1A2226;
+  }
+  [data-palette="sky"][data-theme="dark"] {
+    --bg:#181F23; --surface:#232E33; --surface2:#2E3C43; --text:#E8EFF2; --muted:#8498A0;
+    --accent:#7FA6BA; --accent2:#5E89A0; --on-accent:#0E1A20; --border:#2A363B;
+    --nav:rgba(28,36,40,.92); --badge:#7FA6BA; --bubble-in:#232E33; --bubble-in-text:#E8EFF2;
+    --shadow:rgba(0,0,0,.45); --sidebar:#0F1416;
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { height: 100%; background: #3B3FCF; }
+  html { height: 100%; background: var(--bg); }
   body, #root {
     height: 100%;
     height: 100dvh; /* точный размер с учётом адресной строки iOS Safari */
@@ -15,21 +52,17 @@
   #root {
     padding-top: max(env(safe-area-inset-top, 0px), var(--status-bar-height, 0px));
   }
-  body { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; }
+  body { font-family: 'Nunito', system-ui, sans-serif; font-weight: 500; background: var(--bg); color: var(--text); transition: background .35s ease, color .35s ease; }
   button, input, textarea { font-family: inherit; }
   /* Предотвращаем авто-зум iOS Safari при фокусе на инпутах (срабатывает при font-size < 16px) */
   @media (max-width: 768px) {
     input, textarea, select { font-size: 16px !important; }
   }
   ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-thumb { background: #E0E0E8; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 
 @layer utilities {
-  .font-medium { font-weight: 500; }
-  .font-normal  { font-weight: 400; }
-  /* запрет жирных весов */
-  .font-semibold, .font-bold, .font-extrabold { font-weight: 500 !important; }
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Safe area insets для iOS (вырез, нижний бар навигации) */

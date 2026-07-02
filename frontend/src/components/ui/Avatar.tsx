@@ -1,9 +1,9 @@
 import React from 'react'
 
 const PALETTE = [
-  ['#DDE4FF','#3730A3'], ['#D1FAE5','#065F46'], ['#FEE2E2','#991B1B'],
-  ['#FEF3C7','#92400E'], ['#EDE9FE','#5B21B6'], ['#CFFAFE','#0E7490'],
-  ['#FCE7F3','#9D174D'], ['#F0FDF4','#14532D'],
+  ['#F0C29B','#9C5A28'], ['#9FC2D2','#2E586B'], ['#B7C3A8','#46562F'],
+  ['#C9B7E0','#5E4A82'], ['#E8B4B0','#8A3A34'], ['#C7D9A8','#4C6B2E'],
+  ['#E3C9A0','#7A5222'], ['#A9C9C4','#2E5E58'],
 ]
 
 function paletteFrom(id = '') {
@@ -39,7 +39,7 @@ export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 
         />
       ) : (
         <div
-          className="rounded-full flex items-center justify-center font-medium select-none"
+          className="rounded-full flex items-center justify-center font-extrabold select-none"
           style={{ ...style, backgroundColor: bg, color: fg }}
         >
           {initials(name)}

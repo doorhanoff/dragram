@@ -24,16 +24,17 @@ function FilterItem({ icon, label, sub, isActive, onClick }: FilterItemProps) {
     <div
       onClick={onClick}
       className={[
-        'flex items-center gap-2 px-[9px] py-[7px] mx-[5px] my-px rounded-lg cursor-pointer transition-colors',
-        isActive ? 'bg-accent-light' : 'hover:bg-bg',
+        'flex items-center gap-3 px-3 py-[9px] mx-1.5 my-px rounded-2xl cursor-pointer transition-colors',
+        isActive ? 'shadow-soft' : 'hover:bg-bg',
       ].join(' ')}
+      style={isActive ? { background: 'var(--surface2)' } : undefined}
     >
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-accent text-white' : 'bg-bg text-muted'}`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent' : 'bg-bg text-muted'}`}>
         {icon}
       </div>
       <div className="min-w-0">
-        <div className={`text-md font-medium ${isActive ? 'text-accent' : 'text-primary'}`}>{label}</div>
-        <div className="text-xs text-muted ellipsis">{sub}</div>
+        <div className={`text-md font-extrabold ${isActive ? 'text-accent' : 'text-primary'}`}>{label}</div>
+        <div className="text-xs font-semibold text-muted ellipsis">{sub}</div>
       </div>
     </div>
   )
@@ -41,17 +42,16 @@ function FilterItem({ icon, label, sub, isActive, onClick }: FilterItemProps) {
 
 export default function PostList({ filter, onFilter, query, onQuery, onCreatePost }: Props) {
   return (
-    <div className="w-[230px] flex-shrink-0 bg-surface border-r border-border flex flex-col">
-      <div className="px-4 pt-4 pb-2">
-        <h2 className="text-xl font-medium text-primary mb-3">Посты</h2>
-        <div className="flex items-center gap-2 bg-bg rounded-lg px-3 py-[7px]">
-          <IconSearch size={14} stroke={1.5} className="text-[#bbb] flex-shrink-0" />
+    <div className="w-[280px] flex-shrink-0 bg-surface border-r border-border flex flex-col">
+      <div className="px-5 pt-5 pb-2">
+        <h2 className="text-3xl font-black text-primary tracking-tight mb-4">Посты</h2>
+        <div className="flex items-center gap-2.5 bg-bg rounded-full px-[18px] h-[46px] shadow-soft">
+          <IconSearch size={18} stroke={1.8} className="text-muted flex-shrink-0" />
           <input
             value={query}
             onChange={e => onQuery(e.target.value)}
             placeholder="Поиск"
-            className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted"
-            style={{ fontSize: 12 }}
+            className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted font-semibold text-md"
           />
         </div>
       </div>

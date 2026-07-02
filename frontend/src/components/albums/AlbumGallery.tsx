@@ -95,23 +95,23 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
       <div className="max-w-3xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-3 gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <button onClick={onBack} className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:bg-surface flex-shrink-0">
-              <IconArrowLeft size={18} stroke={1.5} />
+            <button onClick={onBack} className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-accent hover:bg-surface flex-shrink-0">
+              <IconArrowLeft size={20} stroke={2.2} />
             </button>
-            <h1 className="text-xl font-semibold text-primary truncate">{album?.name || 'Альбом'}</h1>
+            <h1 className="text-2xl font-black text-primary tracking-tight truncate">{album?.name || 'Альбом'}</h1>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setShowAddMember(true)}
-              className="flex items-center gap-1.5 border border-border bg-surface rounded-xl px-3 py-2 text-sm font-medium text-primary hover:border-accent transition-colors"
+              className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-primary hover:border-accent transition-colors"
             >
-              <IconUserPlus size={16} stroke={1.5} />
+              <IconUserPlus size={16} stroke={1.8} />
               <span className="hidden sm:inline">Добавить</span>
             </button>
             <button
               onClick={() => fileInput.current?.click()}
               disabled={uploading}
-              className="flex items-center gap-1.5 bg-accent text-white rounded-xl px-3.5 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <IconUpload size={16} stroke={1.5} />
               <span className="hidden sm:inline">{uploading ? 'Загрузка…' : 'Загрузить'}</span>
@@ -145,24 +145,24 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
 
         {materials !== null && materials.length === 0 && (
           <div className="text-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-accent-light flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-surface2 flex items-center justify-center mx-auto mb-4">
               <IconUpload size={28} stroke={1.5} className="text-accent" />
             </div>
-            <p className="text-primary font-medium mb-1">Здесь пока пусто</p>
-            <p className="text-sm text-muted">Загрузите первые фото и видео</p>
+            <p className="text-primary font-extrabold mb-1">Здесь пока пусто</p>
+            <p className="text-md font-semibold text-muted">Загрузите первые фото и видео</p>
           </div>
         )}
 
         <div className="flex flex-col gap-5">
           {groupByDay(materials || []).map(group => (
             <div key={group.date}>
-              <div className="text-sm font-medium text-muted mb-2 capitalize">{fmtDay(group.date)}</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="text-md font-extrabold text-muted mb-2.5 capitalize">{fmtDay(group.date)}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {group.items.map(m => (
                   <button
                     key={m.id}
                     onClick={() => setActive(m)}
-                    className="relative aspect-square rounded-xl overflow-hidden bg-surface border border-border group"
+                    className="relative aspect-square rounded-2xl overflow-hidden bg-surface shadow-soft group"
                   >
                     {isVideo(m.link) ? (
                       <>

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { IconX, IconPhone, IconAlignLeft, IconLogout, IconId, IconPencil, IconCheck, IconCamera } from '@tabler/icons-react'
+import { IconX, IconPhone, IconAlignLeft, IconLogout, IconId, IconPencil, IconCheck, IconCamera, IconPalette, IconChevronRight } from '@tabler/icons-react'
 import Avatar from './Avatar'
+import AppearanceModal from './AppearanceModal'
+import { useTheme } from '../../theme'
 import { api } from '../../api'
 
 interface Props {
@@ -17,7 +19,10 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [showAppearance, setShowAppearance] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const { palette } = useTheme()
+  const paletteLabel = { hearth: 'Очаг', forest: 'Лес', sky: 'Небо' }[palette]
 
   useEffect(() => {
     api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))
@@ -61,7 +66,7 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-surface rounded-2xl w-full max-w-md shadow-xl overflow-hidden max-h-[90dvh] flex flex-col">
+      <div className="bg-surface rounded-card w-full max-w-md shadow-xl overflow-hidden max-h-[90dvh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-border flex-shrink-0">
           <span className="text-lg font-medium text-primary">Профиль</span>
@@ -174,11 +179,26 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
                 )}
               </div>
 
+              {/* Внешний вид */}
+              <div className="p-4 pb-0">
+                <button
+                  onClick={() => setShowAppearance(true)}
+                  className="w-full flex items-center gap-3.5 bg-bg rounded-2xl px-4 py-3.5 text-left hover:bg-surface2 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-accent flex-shrink-0">
+                    <IconPalette size={19} stroke={1.5} />
+                  </div>
+                  <span className="flex-1 text-md font-bold text-primary">Внешний вид</span>
+                  <span className="text-sm font-bold text-accent">{paletteLabel}</span>
+                  <IconChevronRight size={18} stroke={2} className="text-muted" />
+                </button>
+              </div>
+
               {/* Logout */}
               <div className="p-4 pb-safe">
                 <button
                   onClick={onLogout}
-                  className="w-full flex items-center justify-center gap-2 bg-bg text-red-500 rounded-xl py-2.5 text-sm font-medium hover:bg-border transition-colors"
+                  className="w-full flex items-center justify-center gap-2 bg-bg text-red-500 rounded-2xl py-2.5 text-sm font-bold hover:bg-border transition-colors"
                 >
                   <IconLogout size={16} stroke={1.5} />
                   Выйти из аккаунта
@@ -188,6 +208,8 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
           )}
         </div>
       </div>
+
+      {showAppearance && <AppearanceModal onClose={() => setShowAppearance(false)} />}
     </div>
   )
 }

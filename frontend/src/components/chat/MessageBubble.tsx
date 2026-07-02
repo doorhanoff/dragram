@@ -13,8 +13,8 @@ function fmtTime(dt?: string): string {
 
 // Одна галочка — отправлено, две — прочитано
 function Checks({ isRead, white }: { isRead: boolean; white?: boolean }) {
-  const color = white ? 'rgba(255,255,255,0.65)' : '#A0A0B0'
-  const readColor = white ? '#fff' : '#5B5EF4'
+  const color = white ? 'rgba(255,255,255,0.65)' : 'var(--muted)'
+  const readColor = white ? '#fff' : 'var(--accent)'
   return (
     <svg width="16" height="10" viewBox="0 0 16 10" fill="none" className="inline-block align-middle ml-1 flex-shrink-0">
       {/* первая галочка */}
@@ -54,7 +54,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <img src={msg.text} alt="" className="max-w-[220px] rounded-xl cursor-pointer block"
+          <img src={msg.text} alt="" className="max-w-[220px] rounded-[18px] cursor-pointer block"
             onClick={() => setLightbox(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
@@ -92,7 +92,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
     return (
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-[14px] max-w-[260px] ${isSent ? 'bg-accent text-white rounded-br-[3px]' : 'bg-[#ECEDF5] text-primary rounded-bl-[3px]'}`}>
+        <div className={`flex items-center gap-2 px-3.5 py-2.5 max-w-[260px] shadow-soft ${isSent ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-msg-out' : 'bg-bubbleIn text-bubbleIn-text rounded-msg-in'}`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -110,14 +110,14 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
 
       <div
         className={[
-          'max-w-[68%] px-3 py-2 text-md leading-relaxed break-words overflow-hidden',
+          'max-w-[78%] px-4 py-2.5 text-lg font-semibold leading-relaxed break-words overflow-hidden shadow-soft',
           isSent
-            ? 'bg-accent text-white rounded-[14px] rounded-br-[3px]'
-            : 'bg-[#ECEDF5] text-primary rounded-[14px] rounded-bl-[3px]',
+            ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-msg-out'
+            : 'bg-bubbleIn text-bubbleIn-text rounded-msg-in',
         ].join(' ')}
       >
         {isGroup && !isSent && msg.sender_name && (
-          <div className="text-xs font-medium text-accent-text mb-0.5">{msg.sender_name}</div>
+          <div className="text-sm font-extrabold text-accent mb-0.5">{msg.sender_name}</div>
         )}
         <span>{msg.text}</span>
         {/* Индикатор статуса шифрования */}
@@ -125,7 +125,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
           <span className="text-[10px] opacity-50 ml-1" title="Отправлено до включения E2EE">🔓</span>
         )}
         {/* Время + галочки */}
-        <span className={`text-xs ml-1.5 align-bottom whitespace-nowrap ${isSent ? 'text-white/55' : 'text-[#888]'}`}>
+        <span className={`text-sm ml-1.5 align-bottom whitespace-nowrap font-bold ${isSent ? 'opacity-70' : 'text-muted'}`}>
           {time}
           {isSent && <Checks isRead={msg.is_read} white={isSent} />}
         </span>

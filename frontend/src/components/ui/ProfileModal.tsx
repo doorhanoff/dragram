@@ -21,7 +21,7 @@ export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Pro
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-surface rounded-2xl w-full max-w-xs shadow-xl overflow-hidden">
+      <div className="bg-surface rounded-card w-full max-w-xs shadow-xl overflow-hidden">
         {/* Close */}
         <div className="flex justify-end p-3">
           <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:bg-bg"><IconX size={16} stroke={1.5} /></button>
@@ -35,7 +35,7 @@ export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Pro
             <div className="flex flex-col items-center px-6 pb-5 gap-3">
               <Avatar name={user.name} id={user.id} imageUrl={user.image_url} isActive={user.is_active} size={80} />
               <div className="text-center">
-                <div className="text-lg font-medium text-primary">{user.name}</div>
+                <div className="text-lg font-extrabold text-primary">{user.name}</div>
                 {user.is_active
                   ? <div className="flex items-center justify-center gap-1 mt-0.5"><span className="w-1.5 h-1.5 rounded-full bg-online" /><span className="text-sm text-online">в сети</span></div>
                   : <div className="text-sm text-muted mt-0.5">не в сети</div>
@@ -70,7 +70,7 @@ export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Pro
               <div className="p-4">
                 <button
                   onClick={() => { onStartChat(user.id); onClose() }}
-                  className="w-full flex items-center justify-center gap-2 bg-accent text-white rounded-xl py-2.5 text-sm font-medium hover:bg-accent-text transition-colors"
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl py-2.5 text-sm font-bold shadow-pop transition-opacity hover:opacity-90"
                 >
                   <IconMessage2 size={16} stroke={1.5} />
                   Написать

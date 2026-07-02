@@ -49,23 +49,23 @@ export default function PostCard({ post, onClick }: Props) {
   return (
     <>
       <article
-        className="bg-surface border border-[#E0E0E8] rounded-xl overflow-hidden cursor-pointer hover:shadow-sm transition-shadow"
+        className="bg-surface border border-border rounded-card overflow-hidden cursor-pointer shadow-soft transition-shadow"
         onClick={onClick}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-[13px] pt-[11px] pb-[7px]">
-          <Avatar name={post.created_by?.name} id={post.created_by_id} imageUrl={post.created_by?.image_url} size={30} />
-          <span className="text-md font-medium text-primary flex-1 ellipsis">
+        <div className="flex items-center gap-3 px-[14px] pt-[14px] pb-[10px]">
+          <Avatar name={post.created_by?.name} id={post.created_by_id} imageUrl={post.created_by?.image_url} size={44} />
+          <span className="text-lg font-extrabold text-primary flex-1 ellipsis">
             {post.created_by?.name || 'Аноним'}
           </span>
-          <span className="text-sm text-[#bbb] ml-auto">{fmtAgo(post.created_at)}</span>
+          <span className="text-sm font-bold text-muted ml-auto">{fmtAgo(post.created_at)}</span>
         </div>
 
         {/* Cover */}
         {(coverImg || coverVid) && (
           <div
             className="w-full overflow-hidden relative flex items-center justify-center"
-            style={{ height: 160, background: '#F3F3FA' }}
+            style={{ height: 200, background: 'var(--surface2)' }}
           >
             {coverImg ? (
               <button
@@ -89,11 +89,11 @@ export default function PostCard({ post, onClick }: Props) {
         )}
 
         {/* Body */}
-        <div className="px-[13px] pt-[9px] pb-[11px]">
-          <h3 className="text-md font-medium text-primary mb-[3px] ellipsis">{post.title}</h3>
+        <div className="px-[14px] pt-[12px] pb-[14px]">
+          <h3 className="text-xl font-extrabold text-primary mb-[3px] ellipsis">{post.title}</h3>
           {post.description && (
             <p
-              className="text-sm text-[#888] leading-relaxed mb-[9px]"
+              className="text-md font-semibold text-muted leading-relaxed mb-[12px]"
               style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
             >
               {post.description}
@@ -101,20 +101,20 @@ export default function PostCard({ post, onClick }: Props) {
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-[14px] border-t border-[#F0F0F4] pt-2">
-            <button className={`flex items-center gap-1 text-sm transition-colors ${liked ? 'text-[#E24B4A]' : 'text-[#aaa] hover:text-[#E24B4A]'}`} onClick={handleLike}>
-              <IconHeart size={14} stroke={1.5} fill={liked ? '#E24B4A' : 'none'} />
+          <div className="flex items-center gap-5 border-t border-border pt-[11px]">
+            <button className={`flex items-center gap-1.5 text-md font-bold transition-colors ${liked ? 'text-[#E24B4A]' : 'text-muted hover:text-[#E24B4A]'}`} onClick={handleLike}>
+              <IconHeart size={20} stroke={1.8} fill={liked ? '#E24B4A' : 'none'} />
               <span>{likes || ''}</span>
             </button>
             <button
-              className="flex items-center gap-1 text-sm text-[#aaa] hover:text-primary transition-colors"
+              className="flex items-center gap-1.5 text-md font-bold text-muted hover:text-primary transition-colors"
               onClick={e => { e.stopPropagation(); onClick() }}
             >
-              <IconMessageCircle size={14} stroke={1.5} />
+              <IconMessageCircle size={20} stroke={1.8} />
               <span>комментарии</span>
             </button>
-            <button className={`flex items-center gap-1 text-sm transition-colors ml-auto ${saved ? 'text-accent' : 'text-[#aaa] hover:text-accent'}`} onClick={handleBookmark}>
-              <IconBookmark size={14} stroke={1.5} fill={saved ? '#5B5EF4' : 'none'} />
+            <button className={`flex items-center gap-1.5 text-md font-bold transition-colors ml-auto ${saved ? 'text-accent' : 'text-muted hover:text-accent'}`} onClick={handleBookmark}>
+              <IconBookmark size={19} stroke={1.8} fill={saved ? 'var(--accent)' : 'none'} />
               <span>сохранить</span>
             </button>
           </div>
