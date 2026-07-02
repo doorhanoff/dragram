@@ -26,6 +26,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:3000",
         "capacitor://localhost",
+        "https://localhost",
         "http://localhost",
     ],
     allow_origin_regex=r"http://192\.168\.\d+\.\d+(:\d+)?",

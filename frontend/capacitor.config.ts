@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Dragram',
   webDir: 'dist',
   server: {
-    url: 'https://dragram-production.up.railway.app',
+    androidScheme: 'https',
     cleartext: false,
   },
 }

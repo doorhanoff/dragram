@@ -76,7 +76,12 @@ async def set_offline(
 
 @router.post("/refresh")
 async def refresh(request: Request, response: Response, service: AuthService = Depends(get_auth_service)):
+    # Куки (веб) или Authorization: Bearer <refresh_token> (мобильное)
     refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            refresh_token = auth[7:]
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token")
     try:
@@ -87,7 +92,7 @@ async def refresh(request: Request, response: Response, service: AuthService = D
         raise HTTPException(status_code=401)
     response.set_cookie("token",         tokens.access_token,  httponly=True, samesite="lax", max_age=tokens.expires_in)
     response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax", max_age=tokens.refresh_expires_in)
-    return {"ok": True}
+    return {"ok": True, "access_token": tokens.access_token, "refresh_token": tokens.refresh_token}
 
 
 @router.get("/me", response_model=UserShortResponse)
