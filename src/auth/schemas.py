@@ -47,3 +47,9 @@ class UserShortResponse(BaseModel):
     is_active: bool = False
 
 
+class PublicKeyBody(BaseModel):
+    public_key: str
+
+class KeyBackupBody(BaseModel):
+    key_backup: str
+

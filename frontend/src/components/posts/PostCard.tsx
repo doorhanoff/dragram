@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { IconHeart, IconMessageCircle, IconBookmark, IconPhoto } from '@tabler/icons-react'
+import { IconHeart, IconMessageCircle, IconBookmark, IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
+import VideoLightbox from '../ui/VideoLightbox'
 import type { Post } from '../../types'
 import { api } from '../../api'
 
@@ -25,6 +26,7 @@ export default function PostCard({ post, onClick }: Props) {
   const [saved,   setSaved]   = useState((post as any).is_bookmarked ?? false)
   const [likes,   setLikes]   = useState((post as any).likes_count ?? 0)
   const [lightbox,setLightbox]= useState<number | null>(null)
+  const [videoOpen,setVideoOpen] = useState(false)
 
   async function handleLike(e: React.MouseEvent) {
     e.stopPropagation()
@@ -75,7 +77,17 @@ export default function PostCard({ post, onClick }: Props) {
                 <img src={coverImg} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
               </button>
             ) : (
-              <video src={coverVid} className="max-w-full max-h-full object-contain" preload="metadata" muted />
+              <button
+                className="w-full h-full focus:outline-none relative flex items-center justify-center"
+                onClick={e => { e.stopPropagation(); setVideoOpen(true) }}
+              >
+                <video src={coverVid} className="max-w-full max-h-full object-contain" preload="metadata" muted playsInline />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors">
+                  <div className="w-11 h-11 rounded-full bg-white/90 flex items-center justify-center">
+                    <IconPlayerPlayFilled size={18} className="text-primary ml-0.5" />
+                  </div>
+                </div>
+              </button>
             )}
 
             {/* Бейдж "ещё N фото" */}
@@ -128,6 +140,9 @@ export default function PostCard({ post, onClick }: Props) {
           startIndex={lightbox}
           onClose={() => setLightbox(null)}
         />
+      )}
+      {videoOpen && coverVid && (
+        <VideoLightbox src={coverVid} onClose={() => setVideoOpen(false)} />
       )}
     </>
   )

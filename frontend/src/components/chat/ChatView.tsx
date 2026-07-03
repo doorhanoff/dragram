@@ -33,16 +33,13 @@ interface Props {
   messages: Message[]
   setMessages: React.Dispatch<React.SetStateAction<Record<string, Message[]>>>
   userId: string
-  hasChatKey: boolean
-  safetyNumber?: string | null
   onSend: (text: string) => void
   onBack?: () => void
   onStartChat?: (userId: string) => void
 }
 
-export default function ChatView({ chatId, chat, messages, setMessages, userId, hasChatKey, safetyNumber, onSend, onBack, onStartChat }: Props) {
+export default function ChatView({ chatId, chat, messages, setMessages, userId, onSend, onBack, onStartChat }: Props) {
   const [text, setText]               = useState('')
-  const [showSafety, setShowSafety]   = useState(false)
   const [activeMsg,  setActiveMsg]    = useState<string | null>(null)
   const [uploading, setUploading]     = useState<{ file: File; progress: number } | null>(null)
   const [profileId, setProfileId]     = useState<string | null>(null)
@@ -157,6 +154,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
 
   async function handleDelete(msgId?: string) {
     if (!msgId || !chatId) return
+    if (!window.confirm('Удалить сообщение?')) return
     try {
       await api.deleteMessage(chatId, msgId)
       setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).filter(m => (m.id || (m as any)._id) !== msgId) }))
@@ -190,7 +188,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg">
       {/* Header */}
-      <div className="bg-bg flex items-center gap-3 px-4 pb-3 flex-shrink-0" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)' }}>
+      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
         {onBack && (
           <button onClick={onBack} className="text-accent hover:opacity-70 transition-opacity md:hidden">
             <IconArrowLeft size={24} stroke={2.4} />
@@ -209,38 +207,6 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           )}
         </div>
       </div>
-
-      {/* E2EE статус */}
-      {!hasChatKey ? (
-        <div className="bg-yellow-50 border-b border-yellow-100 text-yellow-700 text-xs px-4 py-2 flex items-center gap-2 flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
-          </svg>
-          Чат не зашифрован — собеседник ещё не открыл приложение
-        </div>
-      ) : safetyNumber && (
-        <>
-          <div
-            className="text-sm px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer transition-colors"
-            style={{ background: 'var(--surface2)', color: '#3E8E5A' }}
-            onClick={() => setShowSafety(s => !s)}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <span className="font-bold">Сквозное шифрование включено</span>
-            <span className="opacity-70 font-semibold">{showSafety ? '▲' : '▼'} Safety Number</span>
-          </div>
-          {showSafety && (
-            <div className="bg-bg border-b border-border px-4 py-3 flex-shrink-0">
-              <p className="text-xs text-muted mb-2">Сверьте этот номер с собеседником лично или по другому каналу. Если не совпадает — возможна MITM-атака.</p>
-              <code className="text-xs font-mono text-primary bg-surface border border-border rounded-lg px-3 py-2 block leading-loose tracking-wider select-all">
-                {safetyNumber}
-              </code>
-            </div>
-          )}
-        </>
-      )}
 
       {/* Messages */}
       <div
@@ -276,7 +242,8 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           return (
             <div
               key={item.key}
-              className="group relative"
+              className={`group relative ${isMine ? 'no-callout' : ''}`}
+              onContextMenu={e => { if (isMine) e.preventDefault() }}
               onTouchStart={e => {
                 if (!isMine) return
                 const touch = e.touches[0]
@@ -316,7 +283,10 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                   className={[
                     'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white',
                     'flex items-center justify-center text-xs transition-all',
-                    isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto',
+                    // group-hover только на устройствах с настоящим hover (мышь) —
+                    // на тачскринах тап иногда "залипает" в hover-состоянии и кнопка удаления
+                    // оставалась бы видна без причины
+                    isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:scale-100 [@media(hover:hover)]:group-hover:pointer-events-auto',
                   ].join(' ')}
                   title="Удалить"
                 >×</button>
@@ -336,12 +306,12 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       </div>
 
       {/* Input */}
-      <div className="bg-bg px-[14px] py-[10px] flex items-end gap-2.5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="bg-bg px-[14px] py-[10px] flex items-center gap-2.5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         {pendingAudio ? (
           <>
             <audio src={pendingAudio.url} controls className="flex-1 h-9" />
             <button onClick={() => { URL.revokeObjectURL(pendingAudio.url); setPending(null) }}
-              className="w-8 h-8 rounded-full bg-red-50 text-red-400 flex items-center justify-center text-xs">×</button>
+              className="w-8 h-8 rounded-full bg-surface2 text-red-400 flex items-center justify-center text-xs">×</button>
             <button onClick={sendAudio} disabled={sendingAudio}
               className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent shadow-pop disabled:opacity-50">
               <IconSend size={18} stroke={1.5} />
@@ -353,7 +323,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
               <IconPaperclip size={24} stroke={2} />
               <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime,audio/*" hidden onChange={handleFile} />
             </label>
-            <div className="flex-1 bg-surface rounded-[22px] flex items-end gap-1 pl-[18px] pr-2 py-[6px] shadow-soft">
+            <div className="flex-1 bg-surface rounded-[22px] flex items-center gap-1 pl-[18px] pr-2 py-[6px] shadow-soft">
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -361,7 +331,6 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                 onKeyDown={onKey}
                 placeholder="Сообщение…"
                 rows={1}
-                disabled={!hasChatKey}
                 className="flex-1 bg-transparent outline-none resize-none text-lg font-semibold text-primary placeholder:text-muted max-h-[100px] disabled:cursor-not-allowed py-1.5"
               />
               <button
@@ -373,7 +342,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
             </div>
             <button
               onClick={send}
-              disabled={!text.trim() || !hasChatKey}
+              disabled={!text.trim()}
               className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0 shadow-pop"
             >
               <IconSend size={18} stroke={1.5} />

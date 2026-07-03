@@ -69,4 +69,7 @@
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
   .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
   .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+  /* Отключает системное контекстное меню (сохранить фото / выделить) на долгом тапе —
+     иначе оно конфликтует с собственным long-press (выбор фото, удаление сообщения) */
+  .no-callout { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 }

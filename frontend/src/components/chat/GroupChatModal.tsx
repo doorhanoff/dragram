@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { IconX, IconSearch, IconPlus, IconCamera } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import { api } from '../../api'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   currentUserId: string
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function GroupChatModal({ currentUserId, onClose, onCreate }: Props) {
+  useBackHandler(onClose)
   const [name,     setName]     = useState('')
   const [query,    setQuery]    = useState('')
   const [results,  setResults]  = useState<any[]>([])

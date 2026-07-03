@@ -4,6 +4,7 @@ import Avatar from './Avatar'
 import AppearanceModal from './AppearanceModal'
 import { useTheme } from '../../theme'
 import { api } from '../../api'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   userId: string
@@ -23,6 +24,8 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const { palette } = useTheme()
   const paletteLabel = { hearth: 'Очаг', forest: 'Лес', sky: 'Небо' }[palette]
+
+  useBackHandler(onClose)
 
   useEffect(() => {
     api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))

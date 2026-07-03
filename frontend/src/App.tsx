@@ -4,7 +4,6 @@ import {
   generateKeypairFull, storeKeypair, loadKeypair, exportPublicKey,
   deriveSharedKey, generateGroupKey, encryptGroupKey, decryptGroupKey,
   encryptMessage, decryptMessage, encryptKeyBackup, decryptKeyBackup,
-  computeSafetyNumber,
 } from './crypto'
 
 import Auth              from './components/Auth'
@@ -20,6 +19,9 @@ import ProfileModal      from './components/ui/ProfileModal'
 import MyProfileModal    from './components/ui/MyProfileModal'
 import AlbumsList        from './components/albums/AlbumsList'
 import AlbumGallery      from './components/albums/AlbumGallery'
+
+import { consumeBack } from './hooks/useBackHandler'
+import { useTheme } from './theme'
 
 import type { User, Chat, Message, NavSection, Album } from './types'
 
@@ -53,6 +55,7 @@ async function decryptMsgs(msgs: Message[], key: any): Promise<Message[]> {
 
 // ── App ───────────────────────────────────────────────────────────────────
 export default function App() {
+  const { dark } = useTheme()
   const [user,          setUser]          = useState<User | null>(null)
   const [loading,       setLoading]       = useState(true)
   const [chats,         setChats]         = useState<Chat[]>([])
@@ -81,24 +84,54 @@ export default function App() {
   useEffect(() => {
     Promise.all([import('@capacitor/status-bar'), import('@capacitor/core')]).then(
       ([{ StatusBar, Style }, { Capacitor }]) => {
+        // Style.Light = тёмные иконки (для светлого фона), Style.Dark = светлые иконки
+        // (для тёмного фона) — названия говорят про ЦВЕТ ФОНА, под который подобран стиль,
+        // а не про цвет самих иконок. Раньше стоял Style.Dark всегда, поэтому на светлой
+        // теме время/вайфай/батарея были белыми и почти не видны.
+        const style = dark ? Style.Dark : Style.Light
         if (Capacitor.getPlatform() === 'android') {
           // На Android edge-to-edge включён принудительно (targetSdk 35+),
           // overlaysWebView ничего не меняет — резервируем место вручную.
           // 24dp ~ стандартная высота статус-бара на Android (Pixel и большинство устройств).
           StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
           document.documentElement.style.setProperty('--status-bar-height', '24px')
-          StatusBar.setBackgroundColor({ color: '#3B3FCF' }).catch(() => {})
-          StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+          StatusBar.setStyle({ style }).catch(() => {})
         } else {
           StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
-          StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+          StatusBar.setStyle({ style }).catch(() => {})
         }
       }
     ).catch(() => {})
-  }, [])
+  }, [dark])
 
   useEffect(() => { chatsRef.current = chats }, [chats])
   useEffect(() => { userIdRef.current = user?.id || null }, [user])
+
+  // Аппаратная/жестовая кнопка "назад" на Android: сначала закрываем открытый
+  // оверлей (модалку/лайтбокс), затем возвращаемся из чата/поста/альбома к списку,
+  // и только потом сворачиваем приложение — как в обычных Android-приложениях.
+  const mobileScreenRef = useRef(mobileScreen)
+  useEffect(() => { mobileScreenRef.current = mobileScreen }, [mobileScreen])
+
+  useEffect(() => {
+    let removeListener: (() => void) | undefined
+    Promise.all([import('@capacitor/app'), import('@capacitor/core')]).then(
+      ([{ App: CapApp }, { Capacitor }]) => {
+        if (Capacitor.getPlatform() !== 'android') return
+        CapApp.addListener('backButton', () => {
+          if (consumeBack()) return
+          if (mobileScreenRef.current === 'detail') {
+            setMobileScreen('list')
+            setActivePostId(null)
+            setActiveAlbumId(null)
+            return
+          }
+          CapApp.exitApp()
+        }).then(handle => { removeListener = () => handle.remove() })
+      }
+    ).catch(() => {})
+    return () => removeListener?.()
+  }, [])
 
   // push-уведомления (только Android)
   useEffect(() => {
@@ -116,14 +149,6 @@ export default function App() {
     window.addEventListener('auth:expired', h)
     return () => window.removeEventListener('auth:expired', h)
   }, [])
-
-  // offline on unload
-  useEffect(() => {
-    if (!user) return
-    const h = () => api.setOffline().catch(() => {})
-    window.addEventListener('beforeunload', h)
-    return () => window.removeEventListener('beforeunload', h)
-  }, [user?.id])
 
   // ── Crypto setup ──────────────────────────────────────────────────────────
   // password — пароль аккаунта (передаётся при логине/регистрации)
@@ -215,6 +240,15 @@ export default function App() {
     const id = setInterval(loadChats, 15000)
     return () => clearInterval(id)
   }, [user, loadChats])
+
+  // Статус "в сети" хранится в Redis по TTL (см. AuthService.set_user_online) —
+  // без периодического heartbeat он погаснет через минуту после входа
+  useEffect(() => {
+    if (!user) return
+    api.heartbeat().catch(() => {})
+    const id = setInterval(() => { api.heartbeat().catch(() => {}) }, 25000)
+    return () => clearInterval(id)
+  }, [user])
 
   const loadAlbums = useCallback(async () => {
     try { setAlbums(await api.getAlbums() || []) } catch {}
@@ -350,22 +384,6 @@ export default function App() {
     loadChats()
   }, [loadChats])
 
-  // ── Safety number для текущего чата ──────────────────────────────────────
-  const [safetyNumber, setSafetyNumber] = useState<string | null>(null)
-
-  useEffect(() => {
-    setSafetyNumber(null)
-    if (!currentChatId || !myPubKeyRef.current) return
-    const chat = chatsRef.current.find(c => c.id === currentChatId)
-    if (!chat || (chat.members?.length || 0) !== 2) return
-    const other = chat.members?.find(m => String(m.id) !== String(userIdRef.current))
-    if (!other) return
-    api.getUserPublicKey(other.id)
-      .then(({ public_key }) => computeSafetyNumber(myPubKeyRef.current!, public_key))
-      .then(setSafetyNumber)
-      .catch(() => {})
-  }, [currentChatId])
-
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-bg">
@@ -391,8 +409,6 @@ export default function App() {
       messages={messages[currentChatId || ''] || []}
       setMessages={setMessages as any}
       userId={user.id}
-      hasChatKey={chatKeysRef.current.has(currentChatId || '')}
-      safetyNumber={safetyNumber}
       onSend={sendMessage}
       onBack={() => setMobileScreen('list')}
       onStartChat={(uid) => startChat(uid)}
@@ -463,8 +479,10 @@ export default function App() {
             )
           )}
         </div>
-        <BottomNav active={activeTab} onNavigate={s => { setActiveTab(s); setMobileScreen('list') }} onProfile={() => setShowMyProfile(true)}
-          unread={chats.reduce((sum, c) => sum + (c.unread_count || 0), 0)} />
+        {mobileScreen === 'list' && (
+          <BottomNav active={activeTab} onNavigate={s => { setActiveTab(s); setMobileScreen('list') }} onProfile={() => setShowMyProfile(true)}
+            unread={chats.reduce((sum, c) => sum + (c.unread_count || 0), 0)} />
+        )}
       </div>
 
       {showCreate && (

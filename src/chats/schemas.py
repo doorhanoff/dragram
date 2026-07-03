@@ -85,3 +85,9 @@ class MessageDbSchema(BaseModel):
     chat_id: uuid.UUID
     sender_id: uuid.UUID
     is_read: bool = Field(default=False)
+
+
+class ForwardMessage(BaseModel):
+    text: str
+    type: Literal["image", "video", "audio"]
+    thumbnail_url: str | None = None

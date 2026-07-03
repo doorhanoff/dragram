@@ -24,7 +24,6 @@ class UsersOrm(Base):
     image_url: Mapped[str] = mapped_column(Text, nullable=True)
 
     is_admin:  Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     public_key:  Mapped[str] = mapped_column(Text, nullable=True)
     key_backup:  Mapped[str] = mapped_column(Text, nullable=True)

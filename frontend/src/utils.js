@@ -38,3 +38,22 @@ export function fmtDay(dt) {
   if (d.toDateString() === yest.toDateString())  return 'Вчера'
   return d.toLocaleDateString('ru', { day: 'numeric', month: 'long' })
 }
+
+// Скачивает файл по URL как вложение (а не открывает в новой вкладке)
+export async function downloadUrl(url, filename) {
+  const name = filename || url.split('/').pop() || 'file'
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(href)
+  } catch {
+    window.open(url, '_blank')
+  }
+}

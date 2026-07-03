@@ -12,11 +12,10 @@ from .models import ChatsOrm
 from .repo import ChatsRepository
 from .schemas import (
     CreateChat, ChatsResponse, MessagesResponse,
-    MessageDbSchema, MessageSchema, SetChatKeys,
+    MessageDbSchema, MessageSchema, SetChatKeys, ForwardMessage,
 )
 from .service import ChatsService
 from src.auth.depends import get_current_user
-from src.auth.repo import AuthRepository
 from src.db.database import async_session
 from src.jwt_auth.depends import get_jwt_manager
 from src.jwt_auth.jwt_service import JWTManager, JWTError
@@ -61,7 +60,7 @@ async def get_chats(
     redis: Redis = Depends(get_redis_client),
 ):
     chats = user.chats
-    # Обогащаем is_active из Redis (TTL-ключи)
+
     for chat in chats:
         for member in getattr(chat, 'members', []):
             key_exists = await redis.exists(f"online:{member.id}")
@@ -173,14 +172,17 @@ async def chat_websocket(
     except JWTError:
         raise WebSocketException(code=4001, reason="Invalid token")
 
-    # 2. Membership check + set online
+    # 2. Membership check
     async with async_session() as session:
         repo = ChatsRepository(session)
         chat = await repo.get_by_id(chat_id)
         if not chat or user_id not in chat.members_ids:
             raise WebSocketException(code=4003, reason="Not a member")
-        auth_repo = AuthRepository(session)
-        await auth_repo.set_active(user_id, True)
+
+    # Онлайн-статус — только Redis (TTL), см. set_user_online. Открытый чат — надёжный
+    # сигнал "в сети", но при дисконнекте намеренно НЕ гасим статус сразу: пользователь
+    # мог просто переключиться между чатами, а не закрыть приложение — TTL истечёт сам.
+    await redis.set(f"online:{user_id}", "1", ex=60)
 
     await ws.accept()
 
@@ -258,9 +260,16 @@ async def chat_websocket(
     finally:
         await pubsub.unsubscribe(channel)
         await pubsub.aclose()
-        async with async_session() as session:
-            auth_repo = AuthRepository(session)
-            await auth_repo.set_active(user_id, False)
+
+
+@router.post("/{chat_id}/forward", status_code=status.HTTP_204_NO_CONTENT)
+async def forward_message(
+    data: ForwardMessage,
+    chat: ChatsOrm = Depends(get_chat),
+    user: UsersOrm = Depends(get_current_user),
+    service: ChatsService = Depends(get_chats_service),
+):
+    await service.forward_message(user, data, chat)
 
 
 @router.post("/{chat_id}/upload", response_model=dict)

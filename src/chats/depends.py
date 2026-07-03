@@ -15,7 +15,6 @@ import uuid
 async def get_chats_repo(session: AsyncSession = Depends(get_async_session)) -> ChatsRepository:
     return ChatsRepository(session)
 
-
 async def get_chats_service(
     repo: ChatsRepository = Depends(get_chats_repo),
     s3: S3Service = Depends(get_s3_service),

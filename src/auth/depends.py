@@ -1,3 +1,4 @@
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, Request, HTTPException, WebSocket, WebSocketException, status
 from src.db.database import get_async_session
@@ -7,6 +8,7 @@ from .repo import AuthRepository
 from .service import AuthService
 from .schemas import TokenData
 from .models import UsersOrm
+from ..redis.depends import get_redis_client
 
 
 async def get_auth_repo(session: AsyncSession = Depends(get_async_session)) -> AuthRepository:
@@ -16,8 +18,9 @@ async def get_auth_repo(session: AsyncSession = Depends(get_async_session)) -> A
 async def get_auth_service(
     repo: AuthRepository = Depends(get_auth_repo),
     jwt_manager: JWTManager = Depends(get_jwt_manager),
+    redis: Redis = Depends(get_redis_client)
 ) -> AuthService:
-    return AuthService(repo, jwt_manager)
+    return AuthService(repo, jwt_manager, redis)
 
 
 async def get_token_payload(

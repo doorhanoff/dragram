@@ -5,7 +5,7 @@ from redis.asyncio import Redis
 
 from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember
 from .repo import ChatsRepository
-from .schemas import CreateChat, CreateChatDb, MessageSchema, MessageDbSchema, ChatKeyItem
+from .schemas import CreateChat, CreateChatDb, MessageSchema, MessageDbSchema, ChatKeyItem, ForwardMessage
 from .models import ChatsOrm
 from ..auth.models import UsersOrm
 from ..s3.service import S3Service
@@ -119,3 +119,14 @@ class ChatsService:
         await self.repo.create_message(message_db)
         await self.redis.publish(channel, message.model_dump_json())
         return url
+
+    async def forward_message(self, user: UsersOrm, data: ForwardMessage, chat: ChatsOrm) -> None:
+        """Пересылает уже загруженный медиа-файл (по URL) в другой чат без повторной загрузки."""
+        channel = f"chat:{chat.id}"
+        message = MessageSchema(text=data.text, writer=user.id, type=data.type, thumbnail_url=data.thumbnail_url)
+        message_db = MessageDbSchema(
+            text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
+            sender_id=user.id, chat_id=chat.id,
+        )
+        await self.repo.create_message(message_db)
+        await self.redis.publish(channel, message.model_dump_json())

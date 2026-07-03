@@ -1,7 +1,10 @@
 import uuid
 import asyncio
+
+from redis.asyncio import Redis
+
 from .repo import AuthRepository
-from .schemas import RegisterForm, CreateUser, LoginForm, TokenData
+from .schemas import RegisterForm, CreateUser, LoginForm, TokenData, UserShortResponse
 from .models import UsersOrm
 from src.core.hashing import hash_password, verify_password
 from src.jwt_auth.jwt_service import JWTManager, TokenPair, TokenType
@@ -16,9 +19,10 @@ async def _get_dummy_hash() -> str:
 
 
 class AuthService:
-    def __init__(self, repo: AuthRepository, jwt_manager: JWTManager):
+    def __init__(self, repo: AuthRepository, jwt_manager: JWTManager, redis: Redis):
         self.repo = repo
         self.jwt_manager = jwt_manager
+        self.redis = redis
 
     async def register(self, credentials: RegisterForm) -> UsersOrm:
         hashed = await asyncio.to_thread(hash_password, credentials.password)
@@ -44,8 +48,14 @@ class AuthService:
         payload = await self.jwt_manager.verify_token(access_token)
         return TokenData(id=uuid.UUID(payload.sub))
 
-    async def get_user_by_id(self, user_id: uuid.UUID) -> UsersOrm | None:
-        return await self.repo.get_user_by_id(user_id)
+    async def get_user_by_id(self, user_id: uuid.UUID) -> UserShortResponse | None:
+        user = await self.repo.get_user_by_id(user_id)
+        if not user:
+            return None
+        is_online = await self.redis.exists(f"online:{user_id}")
+        response = UserShortResponse.model_validate(user)
+        response.is_active = bool(is_online)
+        return response
 
     async def get_user_data_by_token(self, access_token: str) -> UsersOrm | None:
         payload = await self.jwt_manager.verify_token(access_token)
@@ -61,17 +71,21 @@ class AuthService:
             return None
         return await self.jwt_manager.refresh_access_token(refresh_token=refresh_token)
 
-    async def search_users(self, search_text: str, offset: int = 0, limit: int = 10) -> list[UsersOrm]:
-        return await self.repo.search(search_text, offset, limit)
+    async def search_users(self, search_text: str, offset: int = 0, limit: int = 10) -> list[UserShortResponse]:
+        users = await self.repo.search(search_text, offset, limit)
+        results = []
+        for u in users:
+            is_online = await self.redis.exists(f"online:{u.id}")
+            response = UserShortResponse.model_validate(u)
+            response.is_active = bool(is_online)
+            results.append(response)
+        return results
 
     async def set_key_backup(self, user_id: uuid.UUID, backup: str) -> None:
         await self.repo.set_key_backup(user_id, backup)
 
     async def get_key_backup(self, user_id: uuid.UUID) -> str | None:
         return await self.repo.get_key_backup(user_id)
-
-    async def set_active(self, user_id: uuid.UUID, active: bool) -> None:
-        await self.repo.set_active(user_id, active)
 
     async def update_profile(self, user_id: uuid.UUID, name: str | None, description: str | None) -> None:
         await self.repo.update_profile(user_id, name, description)
@@ -86,4 +100,9 @@ class AuthService:
 
     async def get_public_key(self, user_id: uuid.UUID) -> str | None:
         return await self.repo.get_public_key(user_id)
+
+    async def set_user_online(self, user_id: uuid.UUID) -> None:
+        # TTL с запасом на пропущенный heartbeat (фронтенд шлёт его раз в 25 сек).
+        # Явного "offline" нет — статус просто гаснет по истечении TTL.
+        await self.redis.set(f"online:{user_id}", "1", ex=60)
 

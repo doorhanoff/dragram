@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { IconX } from '@tabler/icons-react'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   src: string
@@ -19,6 +20,8 @@ export default function VideoLightbox({ src, onClose }: Props) {
     setVisible(false)
     setTimeout(onClose, 180)
   }, [onClose])
+
+  useBackHandler(close)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }

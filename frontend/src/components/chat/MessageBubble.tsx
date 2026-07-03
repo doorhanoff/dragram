@@ -4,6 +4,8 @@ import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import VideoThumb from '../ui/VideoThumb'
+import ForwardModal from './ForwardModal'
+import { api } from '../../api'
 
 function fmtTime(dt?: string): string {
   if (!dt) return ''
@@ -39,6 +41,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
   const time   = fmtTime(msg.date || msg.created_at)
   const [lightbox, setLightbox] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
+  const [forwarding, setForwarding] = useState(false)
 
   // Левая часть: аватар в группе или пустой спейсер
   const leftSlot = !isSent && (
@@ -54,7 +57,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <img src={msg.text} alt="" className="max-w-[220px] rounded-[18px] cursor-pointer block"
+          <img src={msg.text} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
             onClick={() => setLightbox(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
@@ -64,7 +67,19 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
           )}
         </div>
         {lightbox && (
-          <ImageLightbox images={[msg.text]} startIndex={0} onClose={() => setLightbox(false)} />
+          <ImageLightbox
+            images={[msg.text]}
+            startIndex={0}
+            onClose={() => setLightbox(false)}
+            onForward={() => setForwarding(true)}
+          />
+        )}
+        {forwarding && (
+          <ForwardModal
+            userId={userId}
+            onClose={() => setForwarding(false)}
+            onForward={chatId => api.forwardMessage(chatId, { text: msg.text, type: 'image' })}
+          />
         )}
       </div>
     )

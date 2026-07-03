@@ -1,32 +1,16 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, UploadFile, status
-from pydantic import BaseModel
 from .depends import get_auth_service, get_token_payload, get_current_user
 from .models import UsersOrm
-from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm
+from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm, PublicKeyBody, KeyBackupBody
 from .service import AuthService
 from src.jwt_auth.jwt_service import JWTError
-from src.core.rate_limit import make_rate_limiter
 from src.s3.depends import get_s3_service
 from src.s3.service import S3Service
-from src.redis.depends import get_redis_client
-from redis.asyncio import Redis
+
 
 ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
-ONLINE_TTL = 180  # секунд без heartbeat → пользователь оффлайн
 
-async def _set_online(user_id: uuid.UUID, redis: Redis) -> None:
-    await redis.set(f"online:{user_id}", "1", ex=ONLINE_TTL)
-
-async def _set_offline(user_id: uuid.UUID, redis: Redis) -> None:
-    await redis.delete(f"online:{user_id}")
-
-
-class PublicKeyBody(BaseModel):
-    public_key: str
-
-class KeyBackupBody(BaseModel):
-    key_backup: str
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -56,23 +40,9 @@ async def logout(request: Request, response: Response, service: AuthService = De
     if token:
         await service.revoke_token(token)
 
-    try:
-        payload = await service.get_token_payload(request.cookies.get("token", ""))
-        await service.set_active(payload.id, False)
-    except Exception:
-        pass
     response.delete_cookie("token")
     response.delete_cookie("refresh_token")
     return {"ok": True}
-
-
-@router.post("/offline", status_code=status.HTTP_204_NO_CONTENT)
-async def set_offline(
-    user: UsersOrm = Depends(get_current_user),
-    redis: Redis = Depends(get_redis_client),
-):
-    await _set_offline(user.id, redis)
-
 
 @router.post("/refresh")
 async def refresh(request: Request, response: Response, service: AuthService = Depends(get_auth_service)):
@@ -98,23 +68,21 @@ async def refresh(request: Request, response: Response, service: AuthService = D
 @router.get("/me", response_model=UserShortResponse)
 async def me(
     payload: TokenData = Depends(get_token_payload),
-    service: AuthService = Depends(get_auth_service),
-    redis: Redis = Depends(get_redis_client),
+    service: AuthService = Depends(get_auth_service)
 ):
     user = await service.get_user_by_id(payload.id)
     if not user:
         raise HTTPException(status_code=404)
-    await _set_online(payload.id, redis)
+    await service.set_user_online(payload.id)
     return user
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
 async def heartbeat(
     user: UsersOrm = Depends(get_current_user),
-    redis: Redis = Depends(get_redis_client),
+    service: AuthService = Depends(get_auth_service),
 ):
-
-    await _set_online(user.id, redis)
+    await service.set_user_online(user.id)
 
 
 @router.get("/users/{user_id}", response_model=UserShortResponse)

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { IconX, IconPhoto } from '@tabler/icons-react'
 import { api } from '../../api'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   onClose: () => void
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function CreatePostModal({ onClose, onCreate }: Props) {
+  useBackHandler(onClose)
   const [title,    setTitle]    = useState('')
   const [desc,     setDesc]     = useState('')
   const [files,    setFiles]    = useState<File[]>([])

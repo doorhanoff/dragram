@@ -24,7 +24,7 @@ class AuthRepository:
         return result.scalar_one_or_none()
 
     async def get_user_by_id(self, user_id: uuid.UUID) -> UsersOrm | None:
-        from src.chats.models import ChatsOrm  # runtime import — избегаем circular на уровне модуля
+        from src.chats.models import ChatsOrm
         stmt = (
             select(UsersOrm)
             .options(
@@ -49,12 +49,6 @@ class AuthRepository:
         stmt = select(UsersOrm.key_backup).where(UsersOrm.id == user_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
-
-    async def set_active(self, user_id: uuid.UUID, active: bool) -> None:
-        from sqlalchemy import update
-        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(is_active=active)
-        await self.session.execute(stmt)
-        await self.session.commit()
 
     async def update_profile(self, user_id: uuid.UUID, name: str | None, description: str | None) -> None:
         from sqlalchemy import update

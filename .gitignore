@@ -33,3 +33,9 @@ frontend/.env
 
 # Logs
 *.log
+
+# Секреты для Railway (не должны попадать в репозиторий)
+.env.railway
+
+# Локальные сборки APK
+*.apk

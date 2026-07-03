@@ -94,7 +94,6 @@ async function req(method, path, body, isForm = false) {
 export const api = {
   getMe:           ()              => req('GET',  '/auth/me'),
   heartbeat:       ()              => req('POST', '/auth/heartbeat'),
-  setOffline:      ()              => req('POST', '/auth/offline'),
   login: async (phone, pwd) => {
     const data = await req('POST', '/auth/login', { phone_number: phone, password: pwd })
     saveTokens(data?.access_token, data?.refresh_token)
@@ -115,6 +114,7 @@ export const api = {
   },
   markRead:        (id)            => req('PUT',  `/chats/${id}/read`),
   deleteMessage:   (chatId, msgId) => req('DELETE', `/chats/${chatId}/messages/${msgId}`),
+  forwardMessage:  (chatId, data)  => req('POST', `/chats/${chatId}/forward`, data),
   getUser:         (id)            => req('GET',  `/auth/users/${id}`),
   searchUsers:     (q)             => req('GET',  `/auth/users?search_text=${encodeURIComponent(q)}&limit=20`),
   setPublicKey:    (key)           => req('PUT',  '/auth/me/public-key', { public_key: key }),

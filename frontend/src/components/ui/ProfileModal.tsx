@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { IconX, IconMessage2, IconPhone, IconAlignLeft } from '@tabler/icons-react'
 import Avatar from './Avatar'
 import { api } from '../../api'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   userId: string
@@ -13,6 +14,8 @@ interface Props {
 export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Props) {
   const [user,    setUser]    = useState<any>(null)
   const [loading, setLoading] = useState(true)
+
+  useBackHandler(onClose)
 
   useEffect(() => {
     api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))

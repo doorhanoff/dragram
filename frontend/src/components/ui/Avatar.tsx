@@ -35,6 +35,7 @@ export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 
         <img
           src={imageUrl}
           alt={name}
+          loading="lazy"
           className="rounded-full object-cover w-full h-full"
         />
       ) : (

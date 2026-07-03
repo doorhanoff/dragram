@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { IconX, IconSearch, IconPlus } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import { api } from '../../api'
+import { useBackHandler } from '../../hooks/useBackHandler'
 import type { Member } from '../../types'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function AddMemberModal({ members, onClose, onAdd }: Props) {
+  useBackHandler(onClose)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)

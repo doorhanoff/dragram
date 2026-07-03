@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconX, IconCheck } from '@tabler/icons-react'
 import { useTheme, type Palette, type Scale } from '../../theme'
+import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface PaletteInfo { id: Palette; label: string; sub: string; dots: [string, string, string] }
 
@@ -20,6 +21,7 @@ interface Props { onClose: () => void }
 
 export default function AppearanceModal({ onClose }: Props) {
   const { palette, dark, scale, setPalette, setDark, setScale } = useTheme()
+  useBackHandler(onClose)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"

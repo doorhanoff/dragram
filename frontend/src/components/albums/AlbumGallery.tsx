@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconArrowLeft, IconUpload, IconUserPlus, IconX, IconPlayerPlayFilled, IconDownload, IconUsers,
+  IconChecks,
 } from '@tabler/icons-react'
 import { api } from '../../api'
 import Avatar from '../ui/Avatar'
 import AddMemberModal from './AddMemberModal'
+import { downloadUrl } from '../../utils'
+import { useBackHandler } from '../../hooks/useBackHandler'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
 function isVideo(link: string) {
@@ -32,22 +35,8 @@ function groupByDay(materials: AlbumMaterial[]) {
   return groups
 }
 
-async function downloadMaterial(m: AlbumMaterial) {
-  const filename = m.link.split('/').pop() || 'file'
-  try {
-    const res = await fetch(m.link)
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  } catch {
-    window.open(m.link, '_blank')
-  }
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 interface Props {
@@ -62,14 +51,72 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   const [uploading, setUploading] = useState(false)
   const [active, setActive] = useState<AlbumMaterial | null>(null)
   const [showAddMember, setShowAddMember] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [downloading, setDownloading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout>>()
+  const longPressFired = useRef(false)
+  const touchStartPos = useRef({ x: 0, y: 0 })
 
   function load() {
     api.getAlbum(albumId).then(setAlbum).catch(() => {})
     api.getAlbumMaterials(albumId).then(setMaterials).catch(() => setMaterials([]))
   }
 
-  useEffect(() => { setAlbum(null); setMaterials(null); load() }, [albumId])
+  useEffect(() => { setAlbum(null); setMaterials(null); setSelectMode(false); setSelected(new Set()); load() }, [albumId])
+
+  const closeActive = useCallback(() => setActive(null), [])
+  useBackHandler(closeActive, !!active)
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  // Долгое нажатие на фото включает режим выбора и сразу выделяет его —
+  // как в стандартной галерее телефона, без отдельной кнопки "Выбрать"
+  function onTileTouchStart(e: React.TouchEvent, id: string) {
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    longPressFired.current = false
+    clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      setSelectMode(true)
+      toggleSelect(id)
+    }, 450)
+  }
+  function onTileTouchMove(e: React.TouchEvent) {
+    const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x)
+    const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y)
+    if (dx > 10 || dy > 10) clearTimeout(longPressTimer.current)
+  }
+  function onTileTouchEnd() {
+    clearTimeout(longPressTimer.current)
+  }
+  function onTileClick(m: AlbumMaterial) {
+    if (longPressFired.current) { longPressFired.current = false; return }
+    selectMode ? toggleSelect(m.id) : setActive(m)
+  }
+
+  async function downloadSelected() {
+    if (!materials || selected.size === 0) return
+    setDownloading(true)
+    try {
+      for (const m of materials) {
+        if (!selected.has(m.id)) continue
+        await downloadUrl(m.link)
+        await sleep(300) // браузеры блокируют слишком частые одновременные скачивания
+      }
+    } finally {
+      setDownloading(false)
+      setSelectMode(false)
+      setSelected(new Set())
+    }
+  }
 
   async function onFiles(files: FileList | null) {
     if (!files || !files.length) return
@@ -100,31 +147,51 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
             </button>
             <h1 className="text-2xl font-black text-primary tracking-tight truncate">{album?.name || 'Альбом'}</h1>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => setShowAddMember(true)}
-              className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-primary hover:border-accent transition-colors"
-            >
-              <IconUserPlus size={16} stroke={1.8} />
-              <span className="hidden sm:inline">Добавить</span>
-            </button>
-            <button
-              onClick={() => fileInput.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <IconUpload size={16} stroke={1.5} />
-              <span className="hidden sm:inline">{uploading ? 'Загрузка…' : 'Загрузить'}</span>
-            </button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              hidden
-              onChange={e => onFiles(e.target.files)}
-            />
-          </div>
+          {selectMode ? (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-sm font-bold text-muted">{selected.size ? `Выбрано: ${selected.size}` : 'Выберите файлы'}</span>
+              <button
+                onClick={downloadSelected}
+                disabled={selected.size === 0 || downloading}
+                className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <IconDownload size={16} stroke={1.8} />
+                {downloading ? 'Скачивание…' : `Скачать${selected.size ? ` (${selected.size})` : ''}`}
+              </button>
+              <button
+                onClick={() => { setSelectMode(false); setSelected(new Set()) }}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-muted hover:bg-surface flex-shrink-0"
+              >
+                <IconX size={18} stroke={2} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowAddMember(true)}
+                className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-primary hover:border-accent transition-colors"
+              >
+                <IconUserPlus size={16} stroke={1.8} />
+                <span className="hidden sm:inline">Добавить</span>
+              </button>
+              <button
+                onClick={() => fileInput.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <IconUpload size={16} stroke={1.5} />
+                <span className="hidden sm:inline">{uploading ? 'Загрузка…' : 'Загрузить'}</span>
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                hidden
+                onChange={e => onFiles(e.target.files)}
+              />
+            </div>
+          )}
         </div>
 
         {album?.members && album.members.length > 0 && (
@@ -153,31 +220,56 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
           </div>
         )}
 
+        {!selectMode && materials !== null && materials.length > 0 && (
+          <p className="text-xs text-muted mb-3">Долгое нажатие на файл — выбрать несколько и скачать</p>
+        )}
+
         <div className="flex flex-col gap-5">
           {groupByDay(materials || []).map(group => (
             <div key={group.date}>
               <div className="text-md font-extrabold text-muted mb-2.5 capitalize">{fmtDay(group.date)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {group.items.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setActive(m)}
-                    className="relative aspect-square rounded-2xl overflow-hidden bg-surface shadow-soft group"
-                  >
-                    {isVideo(m.link) ? (
-                      <>
-                        <video src={m.link} className="w-full h-full object-cover" muted />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-                          <div className="w-9 h-9 rounded-full bg-white/90 flex items-center justify-center">
-                            <IconPlayerPlayFilled size={16} className="text-primary ml-0.5" />
+                {group.items.map(m => {
+                  const isSelected = selected.has(m.id)
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => onTileClick(m)}
+                      onTouchStart={e => onTileTouchStart(e, m.id)}
+                      onTouchMove={onTileTouchMove}
+                      onTouchEnd={onTileTouchEnd}
+                      onTouchCancel={onTileTouchEnd}
+                      onContextMenu={e => e.preventDefault()}
+                      className="relative aspect-square rounded-2xl overflow-hidden bg-surface shadow-soft group no-callout"
+                    >
+                      {isVideo(m.link) ? (
+                        <>
+                          <video src={m.link} className="w-full h-full object-cover" preload="metadata" muted />
+                          {!selectMode && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                              <div className="w-9 h-9 rounded-full bg-white/90 flex items-center justify-center">
+                                <IconPlayerPlayFilled size={16} className="text-primary ml-0.5" />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <img src={m.link} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
+                      )}
+                      {selectMode && (
+                        <div className={`absolute inset-0 transition-colors ${isSelected ? 'bg-accent/30' : 'bg-black/10'}`}>
+                          <div
+                            className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center border-2 ${
+                              isSelected ? 'bg-accent border-accent text-onAccent' : 'bg-black/30 border-white/80 text-transparent'
+                            }`}
+                          >
+                            <IconChecks size={14} stroke={3} />
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <img src={m.link} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
-                    )}
-                  </button>
-                ))}
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))}
@@ -191,7 +283,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
         >
           <div className="absolute top-4 right-4 flex items-center gap-2">
             <button
-              onClick={() => downloadMaterial(active)}
+              onClick={() => downloadUrl(active.link)}
               title="Скачать"
               className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20"
             >

@@ -79,8 +79,8 @@ export default function BackupPassphraseModal({ mode, onConfirm, onSkip }: Props
           )}
 
           {isSet && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-yellow-700 leading-relaxed">
+            <div className="bg-accent-light border border-border rounded-lg px-3 py-2.5">
+              <p className="text-xs text-accent-text leading-relaxed">
                 ⚠️ Запомните этот пароль. Без него вы не сможете восстановить переписку на новом устройстве. Он не хранится нигде в открытом виде.
               </p>
             </div>
