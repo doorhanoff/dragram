@@ -1,5 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, UploadFile, status
+
+from jwt_auth.jwt_service import TokenPair
 from .depends import get_auth_service, get_token_payload, get_current_user
 from .models import UsersOrm
 from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm, PublicKeyBody, KeyBackupBody
@@ -31,7 +33,7 @@ async def login(credentials: LoginForm, response: Response, service: AuthService
     response.set_cookie("token", tokens.access_token, httponly=True, samesite="lax", max_age=tokens.expires_in)
     response.set_cookie("refresh_token", tokens.refresh_token, httponly=True, samesite="lax", max_age=tokens.refresh_expires_in)
 
-    return {"ok": True, "access_token": tokens.access_token, "refresh_token": tokens.refresh_token}
+    return tokens
 
 
 @router.post("/logout")
@@ -46,7 +48,6 @@ async def logout(request: Request, response: Response, service: AuthService = De
 
 @router.post("/refresh")
 async def refresh(request: Request, response: Response, service: AuthService = Depends(get_auth_service)):
-    # Куки (веб) или Authorization: Bearer <refresh_token> (мобильное)
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
         auth = request.headers.get("Authorization", "")
@@ -71,8 +72,6 @@ async def me(
     service: AuthService = Depends(get_auth_service)
 ):
     user = await service.get_user_by_id(payload.id)
-    if not user:
-        raise HTTPException(status_code=404)
     await service.set_user_online(payload.id)
     return user
 
@@ -92,8 +91,6 @@ async def get_user(
     service: AuthService = Depends(get_auth_service),
 ):
     user = await service.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
     return user
 
 
@@ -138,7 +135,7 @@ async def update_me(
     user: UsersOrm = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
 ):
-    await service.update_profile(user.id, form.name, form.description)
+    await service.update_profile(user.id, form)
     updated = await service.get_user_by_id(user.id)
     return updated
 

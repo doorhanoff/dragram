@@ -1,14 +1,20 @@
+import json
 import uuid
+from typing import Literal
 
 from fastapi import UploadFile
 from redis.asyncio import Redis
 
 from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember
 from .repo import ChatsRepository
-from .schemas import CreateChat, CreateChatDb, MessageSchema, MessageDbSchema, ChatKeyItem, ForwardMessage
-from .models import ChatsOrm
+from .schemas import (
+    CreateChat, CreateChatDb, MessageDbSchema, ChatKeyItem, ForwardMessage,
+    MessageEvent, ReadEvent, DeleteEvent, WSSendMessage,
+)
+from .models import ChatsOrm, MessagesOrm
 from ..auth.models import UsersOrm
 from ..s3.service import S3Service
+from ..notifications.service import NotificationsService
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -18,12 +24,19 @@ ALLOWED_MEDIA_TYPES = {
     "audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4", "audio/wav",
 }
 
+NOTIFICATION_BODY_BY_TYPE = {
+    "image": "\U0001F4F7 Фото",
+    "video": "\U0001F3A5 Видео",
+    "audio": "\U0001F3B5 Голосовое сообщение",
+}
+
 
 class ChatsService:
-    def __init__(self, repo: ChatsRepository, s3: S3Service, redis: Redis):
+    def __init__(self, repo: ChatsRepository, s3: S3Service, redis: Redis, notifications: NotificationsService):
         self.repo = repo
         self.s3 = s3
         self.redis = redis
+        self.notifications = notifications
 
     async def create(self, data: CreateChat, user: UsersOrm) -> ChatsOrm:
         members = list({user.id, *data.members})
@@ -50,13 +63,34 @@ class ChatsService:
     async def get_all(self) -> list[ChatsOrm]:
         return await self.repo.get_all()
 
+    async def list_chats(self, user: UsersOrm) -> list[ChatsOrm]:
+        chats = user.chats
+        for chat in chats:
+            for member in chat.members:
+                is_online = await self.redis.exists(f"online:{member.id}")
+                member.is_active = bool(is_online)
+            chat.unread_count = sum(
+                1 for m in chat.messages if not m.is_read and m.sender_id != user.id
+            )
+        return chats
+
+    async def set_online(self, user_id: uuid.UUID) -> None:
+        await self.redis.set(f"online:{user_id}", "1", ex=60)
+
+    async def get_messages(
+        self,
+        chat_id: uuid.UUID,
+        limit: int = 50,
+        before_id: uuid.UUID | None = None,
+    ) -> list[MessagesOrm]:
+        return await self.repo.get_messages_paginated(chat_id, limit, before_id)
+
     async def set_chat_keys(self, chat_id: uuid.UUID, keys: list[ChatKeyItem], user: UsersOrm) -> None:
         chat = await self.repo.get_by_id(chat_id)
         if not chat:
             raise ChatNotFound
         if user.id not in chat.members_ids:
             raise NotChatMember
-        # проверяем что каждый user_id в ключах — реальный участник чата
         member_ids = set(chat.members_ids)
         for key in keys:
             if key.user_id not in member_ids:
@@ -71,62 +105,112 @@ class ChatsService:
             raise NotChatMember
         return await self.repo.get_my_chat_key(chat_id, user.id)
 
-    async def receive_messages_loop(self, chat_id: uuid.UUID):
-        pubsub = self.redis.pubsub()
-        channel = f"chat:{chat_id}"
-        await pubsub.subscribe(channel)
+    async def _publish_message(self, chat_id: uuid.UUID, msg: MessagesOrm) -> MessageEvent:
+        event = MessageEvent.from_message(msg)
+        await self.redis.publish(f"chat:{chat_id}", event.model_dump_json())
+        return event
 
-        try:
-            async for raw in pubsub.listen():
-                if raw["type"] == "message":
-                    yield raw["data"]
-        finally:
-            await pubsub.unsubscribe(channel)
-            await pubsub.aclose()
+    async def send_message(
+        self,
+        user: UsersOrm,
+        chat: ChatsOrm,
+        text: str,
+        type: Literal["text", "image", "video", "audio"] = "text",
+        thumbnail_url: str | None = None,
+    ) -> MessageEvent:
+        message_db = MessageDbSchema(
+            text=text, type=type, thumbnail_url=thumbnail_url,
+            sender_id=user.id, chat_id=chat.id,
+        )
+        msg = await self.repo.create_message(message_db)
 
-    async def send_message(self, user: UsersOrm, text: str, chat: ChatsOrm):
-        channel = f"chat:{chat.id}"
-        message = MessageSchema(text=text, writer=user.id, type="text")
-        message_db = MessageDbSchema(text=message.text, sender_id=user.id, chat_id=chat.id)
-        await self.repo.create_message(message_db)
-        await self.redis.publish(channel, message.model_dump_json())
+        published_message = await self._publish_message(chat.id, msg)
+        await self.notify_new_message(chat, user, published_message)
+        return published_message
 
-    async def mark_read(self, chat_id: uuid.UUID, reader_id: uuid.UUID) -> list[uuid.UUID]:
-        return await self.repo.mark_read(chat_id, reader_id)
-
-    async def delete_message(self, message_id: uuid.UUID, sender_id: uuid.UUID, chat_id: uuid.UUID) -> bool:
-        deleted = await self.repo.delete_message(message_id, sender_id)
-        if deleted and deleted.type in ("image", "video", "audio"):
-            await self.s3.delete_file(deleted.text)
-        return deleted is not None
-
-    async def send_media_message(self, user: UsersOrm, file: UploadFile, chat: ChatsOrm, thumbnail=None):
+    async def send_media_message(
+        self, user: UsersOrm, file: UploadFile, chat: ChatsOrm, thumbnail: UploadFile | None = None
+    ) -> MessageEvent:
         if file.content_type not in ALLOWED_MEDIA_TYPES:
             raise InvalidFileType
         url = await self.s3.upload_file(file.file, file.content_type)
-        channel = f"chat:{chat.id}"
-        if file.content_type.startswith("video/"):   msg_type = "video"
-        elif file.content_type.startswith("audio/"): msg_type = "audio"
-        else:                                         msg_type = "image"
+        if file.content_type.startswith("video/"):
+            msg_type = "video"
+        elif file.content_type.startswith("audio/"):
+            msg_type = "audio"
+        else:
+            msg_type = "image"
+
         thumbnail_url = None
         if thumbnail and msg_type == "video":
             try:
                 thumbnail_url = await self.s3.upload_file(thumbnail.file, "image/jpeg")
             except Exception:
                 pass
-        message = MessageSchema(text=url, writer=user.id, type=msg_type, thumbnail_url=thumbnail_url)
-        message_db = MessageDbSchema(text=url, type=msg_type, thumbnail_url=thumbnail_url, sender_id=user.id, chat_id=chat.id)
-        await self.repo.create_message(message_db)
-        await self.redis.publish(channel, message.model_dump_json())
-        return url
 
-    async def forward_message(self, user: UsersOrm, data: ForwardMessage, chat: ChatsOrm) -> None:
-        """Пересылает уже загруженный медиа-файл (по URL) в другой чат без повторной загрузки."""
-        channel = f"chat:{chat.id}"
-        message = MessageSchema(text=data.text, writer=user.id, type=data.type, thumbnail_url=data.thumbnail_url)
-        message_db = MessageDbSchema(
-            text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
-            sender_id=user.id, chat_id=chat.id,
+        return await self.send_message(user, chat, text=url, type=msg_type, thumbnail_url=thumbnail_url)
+
+    async def forward_message(self, user: UsersOrm, data: ForwardMessage, chat: ChatsOrm) -> MessageEvent:
+        return await self.send_message(
+            user, chat, text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
         )
-        await self.repo.create_message(message_db)
-        await self.redis.publish(channel, message.model_dump_json())
+
+    async def notify_new_message(self, chat: ChatsOrm, sender: UsersOrm, event: MessageEvent) -> None:
+        recipient_ids = [m for m in chat.members_ids if m != sender.id]
+        offline_ids = [rid for rid in recipient_ids if not await self.redis.exists(f"online:{rid}")]
+        if not offline_ids:
+            return
+        body = NOTIFICATION_BODY_BY_TYPE.get(event.type, event.text[:100])
+        await self.notifications.notify_users(
+            offline_ids,
+            title=sender.name,
+            body=body,
+            data={"chat_id": str(chat.id), "event": "message"},
+        )
+
+    async def mark_read(self, chat_id: uuid.UUID, reader_id: uuid.UUID) -> ReadEvent | None:
+        msg_ids = await self.repo.mark_read(chat_id, reader_id)
+        if not msg_ids:
+            return None
+        event = ReadEvent(message_ids=msg_ids, reader_id=reader_id)
+        await self.redis.publish(f"chat:{chat_id}", event.model_dump_json())
+        return event
+
+    async def delete_message(self, message_id: uuid.UUID, sender_id: uuid.UUID, chat_id: uuid.UUID) -> DeleteEvent | None:
+        deleted = await self.repo.delete_message(message_id, sender_id)
+        if not deleted:
+            return None
+        if deleted.type in ("image", "video", "audio"):
+            await self.s3.delete_file(deleted.text)
+        event = DeleteEvent(message_id=message_id)
+        await self.redis.publish(f"chat:{chat_id}", event.model_dump_json())
+        return event
+
+    async def handle_incoming_event(self, data: dict, chat: ChatsOrm, user: UsersOrm) -> MessageEvent:
+        if data.get("event") == "read":
+            await self.mark_read(chat.id, user.id)
+        else:
+            incoming = WSSendMessage.model_validate(data)
+            await self.send_message(user, chat, text=incoming.text, type=incoming.type)
+
+
+    def get_pubsub_connection(self, chat_id: uuid.UUID) -> PubSubConnection:
+        return PubSubConnection(chat_id=chat_id, redis=self.redis)
+
+class PubSubConnection:
+    def __init__(self, chat_id: uuid.UUID, redis: Redis) -> None:
+        self._pubsub = redis.pubsub()
+        self._channel = f"chat:{chat_id}"
+
+    async def __aenter__(self):
+        await self._pubsub.subscribe(self._channel)
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self._pubsub.unsubscribe(self._channel)
+        await self._pubsub.aclose()
+
+    async def listen(self):
+        async for raw in self._pubsub.listen():
+            if raw["type"] == "message":
+                yield json.loads(raw["data"])

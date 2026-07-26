@@ -24,8 +24,8 @@ class CreateUser(BaseModel):
 
 
 class UpdateProfileForm(BaseModel):
-    name: str | None = Field(default=None, min_length=2, max_length=50)
-    description: str | None = Field(default=None, max_length=200)
+    name: str = Field(min_length=2, max_length=50)
+    description: str = Field(max_length=200)
 
 
 class LoginForm(BaseModel):

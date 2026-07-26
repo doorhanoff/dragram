@@ -98,7 +98,6 @@ class ChatsRepository:
         return result.scalar_one()
 
     async def mark_read(self, chat_id: uuid.UUID, reader_id: uuid.UUID) -> list[uuid.UUID]:
-        """Помечает все чужие непрочитанные сообщения как прочитанные. Возвращает список ID."""
         stmt = (
             update(MessagesOrm)
             .where(

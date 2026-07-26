@@ -68,16 +68,6 @@ class MessagesResponse(BaseModel):
         )
 
 
-class MessageSchema(BaseModel):
-    id: uuid.UUID | None = None
-    text: str
-    writer: uuid.UUID
-    type: Literal["text", "image", "video", "audio"] = "text"
-    thumbnail_url: str | None = None
-    date: datetime.datetime = Field(default_factory=datetime.datetime.now)
-    sender_name: str | None = None
-
-
 class MessageDbSchema(BaseModel):
     text: str
     type: Literal["text", "image", "video", "audio"] = "text"
@@ -91,3 +81,50 @@ class ForwardMessage(BaseModel):
     text: str
     type: Literal["image", "video", "audio"]
     thumbnail_url: str | None = None
+
+
+# ── websocket / pub-sub events ──────────────────────────────────────────────
+# Inbound: payloads the client sends over the chat websocket.
+# Outbound: payloads the service publishes to Redis and that get forwarded
+# as-is to every websocket subscriber of the chat.
+
+class WSSendMessage(BaseModel):
+    event: Literal["message"] = "message"
+    text: str
+    type: Literal["text", "image", "video", "audio"] = "text"
+
+
+class MessageEvent(BaseModel):
+    event: Literal["message"] = "message"
+    id: uuid.UUID
+    text: str
+    type: Literal["text", "image", "video", "audio"] = "text"
+    thumbnail_url: str | None = None
+    sender_id: uuid.UUID
+    sender_name: str | None = None
+    is_read: bool = False
+    date: datetime.datetime
+
+    @classmethod
+    def from_message(cls, msg) -> "MessageEvent":
+        return cls(
+            id=msg.id,
+            text=msg.text,
+            type=msg.type,
+            thumbnail_url=msg.thumbnail_url,
+            sender_id=msg.sender_id,
+            sender_name=msg.sender.name if msg.sender else None,
+            is_read=msg.is_read,
+            date=msg.created_at,
+        )
+
+
+class ReadEvent(BaseModel):
+    event: Literal["read"] = "read"
+    message_ids: list[uuid.UUID]
+    reader_id: uuid.UUID
+
+
+class DeleteEvent(BaseModel):
+    event: Literal["delete"] = "delete"
+    message_id: uuid.UUID

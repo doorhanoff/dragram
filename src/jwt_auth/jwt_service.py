@@ -227,9 +227,7 @@ class JWTManager:
         extra: dict[str, Any] | None = None,
     ) -> TokenPair:
         payload = await self.verify_token(refresh_token, expected_type=TokenType.REFRESH)
-        # Rotation: отзываем старый refresh token — он больше не сработает
         await self.revoke_token(refresh_token)
-        # Выдаём новую пару
         new_access   = await self.create_token(payload.sub, token_type=TokenType.ACCESS,  extra=extra)
         new_refresh  = await self.create_token(payload.sub, token_type=TokenType.REFRESH)
         return TokenPair(
@@ -243,10 +241,7 @@ class JWTManager:
         try:
             raw = self._decode(token)
         except JWTError:
-            try:
-                raw = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
-            except Exception:
-                return
+            raise TokenInvalidError(f"Token jti={token} cannot be revoked.")
         token_type = TokenType(raw["token_type"])
         ttl = max(int(raw["exp"]) - int(time.time()), 1)
         await self.redis.set(

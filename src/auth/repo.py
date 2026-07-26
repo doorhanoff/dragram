@@ -1,8 +1,10 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import insert, select, or_, func
+from sqlalchemy import insert, select, or_, func, update
 from sqlalchemy.orm import selectinload
-from .schemas import CreateUser
+
+from .exceptions import UserNotFoundError
+from .schemas import CreateUser, UpdateProfileForm
 from .models import UsersOrm
 
 SIMILARITY_THRESHOLD = 0.15
@@ -23,7 +25,7 @@ class AuthRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_user_by_id(self, user_id: uuid.UUID) -> UsersOrm | None:
+    async def get_user_by_id(self, user_id: uuid.UUID) -> UsersOrm:
         from src.chats.models import ChatsOrm
         stmt = (
             select(UsersOrm)
@@ -33,10 +35,12 @@ class AuthRepository:
             .where(UsersOrm.id == user_id)
         )
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if not user:
+            raise UserNotFoundError()
+        return user
 
     async def set_key_backup(self, user_id: uuid.UUID, backup: str) -> None:
-        from sqlalchemy import update
         stmt = (
             update(UsersOrm)
             .where(UsersOrm.id == user_id, UsersOrm.key_backup.is_(None))
@@ -50,16 +54,8 @@ class AuthRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_profile(self, user_id: uuid.UUID, name: str | None, description: str | None) -> None:
-        from sqlalchemy import update
-        values = {}
-        if name is not None:
-            values["name"] = name
-        if description is not None:
-            values["description"] = description
-        if not values:
-            return
-        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(**values)
+    async def update_profile(self, user_id: uuid.UUID, profile_data: UpdateProfileForm) -> None:
+        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(profile_data.model_dump())
         await self.session.execute(stmt)
         await self.session.commit()
 

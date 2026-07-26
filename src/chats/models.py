@@ -37,6 +37,7 @@ class MessagesOrm(Base):
     sender: Mapped["UsersOrm"] = relationship("UsersOrm", foreign_keys=[sender_id], lazy="selectin")
 
 
+
 class ChatsOrm(Base):
     __tablename__ = "chats"
 

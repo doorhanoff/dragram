@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { applyNativeAppIcon } from './nativeIcon'
 
 export type Palette = 'hearth' | 'forest' | 'sky'
 export type Scale = 0.9 | 1 | 1.18
@@ -30,6 +31,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute('data-theme', state.dark ? 'dark' : 'light')
     document.documentElement.style.fontSize = `${state.scale * 100}%`
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+
+    const favicon = document.getElementById('app-favicon') as HTMLLinkElement | null
+    if (favicon) favicon.href = `/icons/icon-${state.palette}.svg`
+
+    const themeColorMeta = document.getElementById('theme-color-meta')
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    if (themeColorMeta && accent) themeColorMeta.setAttribute('content', accent)
+
+    applyNativeAppIcon(state.palette)
   }, [state])
 
   const value: ThemeCtx = {

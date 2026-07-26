@@ -1,5 +1,5 @@
 const CACHE = 'dragram-v1'
-const SHELL = ['/', '/manifest.json', '/icon.svg']
+const SHELL = ['/', '/manifest.json', '/icons/icon-hearth.svg', '/icons/icon-forest.svg', '/icons/icon-sky.svg']
 
 // Install — кэшируем оболочку, но НЕ вызываем skipWaiting
 // (без него SW не перехватывает страницу принудительно → нет мигания)

@@ -9,6 +9,8 @@ from ..auth.depends import get_current_user, ws_get_current_user
 from ..auth.models import UsersOrm
 from ..s3.depends import get_s3_service
 from ..s3.service import S3Service
+from ..notifications.depends import get_notifications_service
+from ..notifications.service import NotificationsService
 import uuid
 
 
@@ -19,8 +21,9 @@ async def get_chats_service(
     repo: ChatsRepository = Depends(get_chats_repo),
     s3: S3Service = Depends(get_s3_service),
     redis: Redis = Depends(get_redis_client),
+    notifications: NotificationsService = Depends(get_notifications_service),
 ) -> ChatsService:
-    return ChatsService(repo, s3, redis)
+    return ChatsService(repo, s3, redis, notifications)
 
 
 async def get_chat(
