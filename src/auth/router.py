@@ -1,15 +1,15 @@
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, UploadFile, status
 
-from jwt_auth.jwt_service import TokenPair
-from .depends import get_auth_service, get_token_payload, get_current_user
-from .models import UsersOrm
-from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm, PublicKeyBody, KeyBackupBody
-from .service import AuthService
 from src.jwt_auth.jwt_service import JWTError
 from src.s3.depends import get_s3_service
 from src.s3.service import S3Service
-
+from .depends import get_auth_service, get_token_payload, get_current_user
+from .models import UsersOrm
+from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, UpdateProfileForm, PublicKeyBody, \
+    KeyBackupBody
+from .service import AuthService
 
 ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 

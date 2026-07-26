@@ -3,7 +3,7 @@ import asyncio
 
 from redis.asyncio import Redis
 
-from jwt_auth.jwt_service import TokenInvalidError
+from src.jwt_auth.jwt_service import TokenInvalidError
 from .exceptions import InvalidTokenError, UserNotFoundError
 from .repo import AuthRepository
 from .schemas import RegisterForm, CreateUser, LoginForm, TokenData, UserShortResponse, UpdateProfileForm
