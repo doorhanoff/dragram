@@ -73,6 +73,7 @@ export default function App() {
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null)
 
   const wsRef          = useRef<WebSocket | null>(null)
+  const wsRetryTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeChatRef  = useRef<string | null>(null)
   const loadedChats    = useRef(new Set<string>())
   const keyPairRef     = useRef<any>(null)
@@ -142,6 +143,7 @@ export default function App() {
   // auth:expired
   useEffect(() => {
     const h = () => {
+      if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
       wsRef.current?.close(); activeChatRef.current = null
       loadedChats.current.clear(); chatKeysRef.current.clear()
       setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
@@ -316,9 +318,20 @@ export default function App() {
       // каждые 3 секунды со всех открытых чатов разом.
       const failStreak = didConnect ? 0 : attempt
       const delay = Math.min(3000 * 2 ** failStreak, 30000) + Math.random() * 1000
-      setTimeout(() => connectWS(chatId, failStreak + 1), delay)
+      wsRetryTimer.current = setTimeout(() => connectWS(chatId, failStreak + 1), delay)
     }
     wsRef.current = ws
+  }, [])
+
+  // Гарантированная очистка сокета при размонтировании компонента (в т.ч. при
+  // Vite HMR — иначе новый инстанс получает свежий wsRef и не знает про сокет,
+  // открытый предыдущим, и тот остаётся висеть на сервере никем не закрытый).
+  useEffect(() => {
+    return () => {
+      activeChatRef.current = null
+      if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
+      wsRef.current?.close()
+    }
   }, [])
 
   // ── Open chat ─────────────────────────────────────────────────────────────
@@ -384,6 +397,7 @@ export default function App() {
 
   const logout = useCallback(async () => {
     await api.logout().catch(() => {})
+    if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
     wsRef.current?.close(); activeChatRef.current = null
     loadedChats.current.clear(); chatKeysRef.current.clear()
     setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
