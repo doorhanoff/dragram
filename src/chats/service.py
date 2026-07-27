@@ -32,11 +32,19 @@ NOTIFICATION_BODY_BY_TYPE = {
 
 
 class ChatsService:
-    def __init__(self, repo: ChatsRepository, s3: S3Service, redis: Redis, notifications: NotificationsService):
+    def __init__(
+        self,
+        repo: ChatsRepository,
+        s3: S3Service,
+        redis: Redis,
+        notifications: NotificationsService,
+        redis_pubsub: Redis,
+    ):
         self.repo = repo
         self.s3 = s3
         self.redis = redis
         self.notifications = notifications
+        self.redis_pubsub = redis_pubsub
 
     async def create(self, data: CreateChat, user: UsersOrm) -> ChatsOrm:
         members = list({user.id, *data.members})
@@ -195,7 +203,7 @@ class ChatsService:
 
 
     def get_pubsub_connection(self, chat_id: uuid.UUID) -> PubSubConnection:
-        return PubSubConnection(chat_id=chat_id, redis=self.redis)
+        return PubSubConnection(chat_id=chat_id, redis=self.redis_pubsub)
 
 class PubSubConnection:
     def __init__(self, chat_id: uuid.UUID, redis: Redis) -> None:

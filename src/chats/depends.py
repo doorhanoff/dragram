@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException, WebSocketException, status
 from redis.asyncio import Redis
 from src.db.database import get_async_session
-from src.redis.depends import get_redis_client
+from src.redis.depends import get_redis_client, get_redis_pubsub_client
 from .repo import ChatsRepository
 from .service import ChatsService
 from ..auth.depends import get_current_user, ws_get_current_user
@@ -21,9 +21,10 @@ async def get_chats_service(
     repo: ChatsRepository = Depends(get_chats_repo),
     s3: S3Service = Depends(get_s3_service),
     redis: Redis = Depends(get_redis_client),
+    redis_pubsub: Redis = Depends(get_redis_pubsub_client),
     notifications: NotificationsService = Depends(get_notifications_service),
 ) -> ChatsService:
-    return ChatsService(repo, s3, redis, notifications)
+    return ChatsService(repo, s3, redis, notifications, redis_pubsub)
 
 
 async def get_chat(
