@@ -76,13 +76,11 @@ async def ws_get_current_user(
     websocket: WebSocket,
     service: AuthService = Depends(get_auth_service),
 ) -> UsersOrm:
-    # Куки (веб) или query param token=... (мобильное)
     token = websocket.cookies.get("token") or websocket.query_params.get("token")
     if not token:
         raise WebSocketException(code=4001, reason="Not authenticated")
     try:
-        payload = await service.get_token_payload(token)
-        user = await service.get_user_by_id(payload.id)
+        user = await service.get_user_data_by_token(token)
         if not user:
             raise WebSocketException(code=4001, reason="User not found")
         return user
