@@ -7,7 +7,7 @@ from redis.asyncio import Redis
 
 from .depends import get_chats_service, get_chat, ws_get_chat
 from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember
-from src.core.rate_limit import make_rate_limiter
+from src.core.rate_limit import make_rate_limiter, make_ws_rate_limiter
 from .models import ChatsOrm
 from .schemas import (
     CreateChat, ChatsResponse, MessagesResponse,
@@ -111,7 +111,8 @@ async def get_my_chat_key(
     return {"encrypted_key": key.encrypted_key}
 
 
-@router.websocket("/ws/{chat_id}")
+@router.websocket("/ws/{chat_id}",
+                   dependencies=[Depends(make_ws_rate_limiter(max_requests=20, window=60))])
 async def chat_websocket(
     ws: WebSocket,
     chat_id: uuid.UUID,
@@ -134,7 +135,7 @@ async def chat_websocket(
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(write_messages())
                 tg.create_task(broadcast_messages())
-        except WebSocketDisconnect:
+        except* WebSocketDisconnect:
             pass
 
 

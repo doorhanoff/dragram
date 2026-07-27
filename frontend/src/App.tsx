@@ -259,7 +259,7 @@ export default function App() {
   }, [activeTab, albums.length, loadAlbums])
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
-  const connectWS = useCallback((chatId: string) => {
+  const connectWS = useCallback((chatId: string, attempt = 0) => {
     wsRef.current?.close()
     // Если задан VITE_WS_URL — используем его (нужно для Capacitor/мобильного)
     // Иначе определяем по текущему хосту
@@ -272,6 +272,9 @@ export default function App() {
     const token = api.getAccessToken()
     const wsUrl = `${wsBase.replace(/\/$/, '')}/chats/ws/${chatId}${token ? `?token=${token}` : ''}`
     const ws = new WebSocket(wsUrl)
+    let didConnect = false
+
+    ws.onopen = () => { didConnect = true }
 
     ws.onmessage = async e => {
       const data = JSON.parse(e.data)
@@ -306,7 +309,15 @@ export default function App() {
       }))
     }
 
-    ws.onclose = () => { if (activeChatRef.current === chatId) setTimeout(() => connectWS(chatId), 3000) }
+    ws.onclose = () => {
+      if (activeChatRef.current !== chatId) return
+      // Экспоненциальный backoff с джиттером (сброс, если до этого успели подключиться) —
+      // без него любой временный сбой на бэкенде превращается в реконнект-шторм
+      // каждые 3 секунды со всех открытых чатов разом.
+      const failStreak = didConnect ? 0 : attempt
+      const delay = Math.min(3000 * 2 ** failStreak, 30000) + Math.random() * 1000
+      setTimeout(() => connectWS(chatId, failStreak + 1), delay)
+    }
     wsRef.current = ws
   }, [])
 
