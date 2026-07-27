@@ -128,8 +128,7 @@ async def chat_websocket(
                 await service.handle_incoming_event(raw, chat, user)
         async def broadcast_messages():
             async for raw in conn.listen():
-                if raw["type"] == "message":
-                    await ws.send_json(json.loads(raw["data"]))
+                await ws.send_json(raw["data"])
 
         try:
             async with asyncio.TaskGroup() as tg:

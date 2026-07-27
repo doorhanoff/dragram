@@ -70,7 +70,7 @@ class AuthService:
             raise InvalidTokenError()
 
     async def refresh_access_token(self, refresh_token: str) -> TokenPair | None:
-        try: payload = await self.jwt_manager.verify_token(refresh_token)
+        try: payload = await self.jwt_manager.verify_token(refresh_token, expected_type=TokenType.REFRESH)
         except TokenInvalidError: raise InvalidTokenError()
         user = await self.repo.get_user_by_id(uuid.UUID(payload.sub))
         if not user:

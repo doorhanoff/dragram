@@ -1,9 +1,11 @@
 import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, or_, func, update
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
 
-from .exceptions import UserNotFoundError
+from .exceptions import UserNotFoundError, UserAlreadyExistsError
 from .schemas import CreateUser, UpdateProfileForm
 from .models import UsersOrm
 
@@ -15,10 +17,13 @@ class AuthRepository:
         self.session = session
 
     async def create_user(self, credentials: CreateUser) -> UsersOrm:
-        stmt = insert(UsersOrm).values(credentials.model_dump()).returning(UsersOrm)
-        result = await self.session.execute(stmt)
-        await self.session.commit()
-        return result.scalar_one()
+        try:
+            stmt = insert(UsersOrm).values(credentials.model_dump()).returning(UsersOrm)
+            result = await self.session.execute(stmt)
+            await self.session.commit()
+            return result.scalar_one()
+        except IntegrityError:
+            raise UserAlreadyExistsError()
 
     async def get_user_by_phone(self, phone_number: str) -> UsersOrm | None:
         stmt = select(UsersOrm).where(UsersOrm.phone_number == phone_number)

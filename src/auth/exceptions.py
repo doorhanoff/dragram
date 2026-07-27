@@ -9,3 +9,6 @@ class UserNotFoundError(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="User not found")
 
+class UserAlreadyExistsError(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail="User already exist")
