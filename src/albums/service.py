@@ -20,7 +20,9 @@ class AlbumsService:
         self.s3 = s3
 
     async def create(self, data: CreateAlbum, user_id: uuid.UUID) -> AlbumsOrm:
-        return await self.repo.create(data, user_id)
+        album = await self.repo.create(data, user_id)
+        await self.repo.commit()
+        return album
 
     async def get_user_albums(self, user_id: uuid.UUID) -> list[AlbumsOrm]:
         return await self.repo.get_user_albums(user_id)
@@ -40,6 +42,7 @@ class AlbumsService:
         if not await self.repo.is_member(album_id, user_id):
             raise NotAlbumMember
         await self.repo.add_member(album_id, target_user_id)
+        await self.repo.commit()
 
     async def remove_member(self, album_id: uuid.UUID, target_user_id: uuid.UUID, user_id: uuid.UUID) -> None:
         album = await self.repo.get_by_id(album_id)
@@ -48,6 +51,7 @@ class AlbumsService:
         if not await self.repo.is_member(album_id, user_id):
             raise NotAlbumMember
         await self.repo.remove_member(album_id, target_user_id)
+        await self.repo.commit()
 
     async def get_materials(self, album_id: uuid.UUID, user_id: uuid.UUID) -> list[AlbumMaterialsOrm]:
         album = await self.repo.get_by_id(album_id)
@@ -71,6 +75,11 @@ class AlbumsService:
         urls = await asyncio.gather(*[
             self.s3.upload_file(f.file, f.content_type) for f in files
         ])
-        return await asyncio.gather(*[
-            self.repo.add_material(album_id, url, user_id) for url in urls
-        ])
+        # Загрузка в S3 идёт параллельно, а запись в БД — последовательно:
+        # AsyncSession не рассчитана на одновременное использование из
+        # нескольких корутин, gather по репозиторию ломает её состояние.
+        materials = [
+            await self.repo.add_material(album_id, url, user_id) for url in urls
+        ]
+        await self.repo.commit()
+        return materials

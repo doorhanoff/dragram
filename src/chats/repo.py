@@ -1,13 +1,11 @@
 import uuid
 from sqlalchemy import insert, select, update, delete, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from src.db.repository import BaseRepository
 from .models import ChatsOrm, MessagesOrm, ChatKeysOrm, chat_members
 from .schemas import CreateChatDb, MessageDbSchema, ChatKeyItem
 
 
-class ChatsRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+class ChatsRepository(BaseRepository):
 
     async def create(self, data: CreateChatDb) -> ChatsOrm:
         values = data.model_dump(exclude={"members"})
@@ -17,7 +15,6 @@ class ChatsRepository:
 
         member_rows = [{"chat_id": chat_id, "user_id": uid} for uid in data.members]
         await self.session.execute(insert(chat_members), member_rows)
-        await self.session.commit()
 
         query = select(ChatsOrm).where(ChatsOrm.id == chat_id)
         result = await self.session.execute(query)
@@ -36,7 +33,6 @@ class ChatsRepository:
     async def update_chat_image(self, chat_id: uuid.UUID, image_url: str) -> ChatsOrm:
         stmt = update(ChatsOrm).where(ChatsOrm.id == chat_id).values(image_url=image_url)
         await self.session.execute(stmt)
-        await self.session.commit()
         query = select(ChatsOrm).where(ChatsOrm.id == chat_id)
         result = await self.session.execute(query)
         return result.scalar_one()
@@ -91,8 +87,6 @@ class ChatsRepository:
     async def create_message(self, data: MessageDbSchema) -> MessagesOrm:
         stmt = insert(MessagesOrm).values(data.model_dump()).returning(MessagesOrm)
         res = await self.session.execute(stmt)
-        await self.session.commit()
-        # reload to get sender relationship
         msg_id = res.scalar_one().id
         result = await self.session.execute(select(MessagesOrm).where(MessagesOrm.id == msg_id))
         return result.scalar_one()
@@ -109,7 +103,6 @@ class ChatsRepository:
             .returning(MessagesOrm.id)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         return [row[0] for row in res.fetchall()]
 
     async def get_message(self, message_id: uuid.UUID) -> MessagesOrm | None:
@@ -124,10 +117,7 @@ class ChatsRepository:
             .returning(MessagesOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         return res.scalar_one_or_none()
-
-    # ── keys ──────────────────────────────────────────────────────────────────
 
     async def set_chat_keys(self, chat_id: uuid.UUID, keys: list[ChatKeyItem]) -> None:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -135,7 +125,6 @@ class ChatsRepository:
         stmt = pg_insert(ChatKeysOrm).values(rows)
         stmt = stmt.on_conflict_do_nothing(index_elements=["chat_id", "user_id"])
         await self.session.execute(stmt)
-        await self.session.commit()
 
     async def get_my_chat_key(self, chat_id: uuid.UUID, user_id: uuid.UUID) -> ChatKeysOrm | None:
         query = select(ChatKeysOrm).where(

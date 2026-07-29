@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, UploadFile, status
 
+from src.core.rate_limit import make_rate_limiter
 from src.jwt_auth.jwt_service import JWTError
 from src.s3.depends import get_s3_service
 from src.s3.service import S3Service
@@ -17,7 +18,8 @@ ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(make_rate_limiter(max_requests=10, window=3600))])
 async def register(credentials: RegisterForm, service: AuthService = Depends(get_auth_service)):
     user = await service.register(credentials)
     if not user:
@@ -25,7 +27,7 @@ async def register(credentials: RegisterForm, service: AuthService = Depends(get
     return {"id": user.id}
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(make_rate_limiter(max_requests=10, window=60))])
 async def login(credentials: LoginForm, response: Response, service: AuthService = Depends(get_auth_service)):
     tokens = await service.login(credentials)
     if not tokens:

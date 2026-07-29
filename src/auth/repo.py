@@ -1,10 +1,10 @@
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, or_, func, update
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
+from src.db.repository import BaseRepository
 from .exceptions import UserNotFoundError, UserAlreadyExistsError
 from .schemas import CreateUser, UpdateProfileForm
 from .models import UsersOrm
@@ -12,15 +12,12 @@ from .models import UsersOrm
 SIMILARITY_THRESHOLD = 0.15
 
 
-class AuthRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+class AuthRepository(BaseRepository):
 
     async def create_user(self, credentials: CreateUser) -> UsersOrm:
         try:
             stmt = insert(UsersOrm).values(credentials.model_dump()).returning(UsersOrm)
             result = await self.session.execute(stmt)
-            await self.session.commit()
             return result.scalar_one()
         except IntegrityError:
             raise UserAlreadyExistsError()
@@ -52,7 +49,6 @@ class AuthRepository:
             .values(key_backup=backup)
         )
         await self.session.execute(stmt)
-        await self.session.commit()
 
     async def get_key_backup(self, user_id: uuid.UUID) -> str | None:
         stmt = select(UsersOrm.key_backup).where(UsersOrm.id == user_id)
@@ -62,13 +58,11 @@ class AuthRepository:
     async def update_profile(self, user_id: uuid.UUID, profile_data: UpdateProfileForm) -> None:
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(profile_data.model_dump())
         await self.session.execute(stmt)
-        await self.session.commit()
 
     async def update_avatar(self, user_id: uuid.UUID, image_url: str) -> None:
         from sqlalchemy import update
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(image_url=image_url)
         await self.session.execute(stmt)
-        await self.session.commit()
 
     async def set_public_key(self, user_id: uuid.UUID, public_key: str) -> None:
         from sqlalchemy import update
@@ -78,7 +72,6 @@ class AuthRepository:
             .values(public_key=public_key)
         )
         await self.session.execute(stmt)
-        await self.session.commit()
 
     async def get_public_key(self, user_id: uuid.UUID) -> str | None:
         stmt = select(UsersOrm.public_key).where(UsersOrm.id == user_id)

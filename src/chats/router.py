@@ -7,7 +7,7 @@ from redis.asyncio import Redis
 
 from .depends import get_chats_service, get_chat, ws_get_chat
 from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember
-from src.core.rate_limit import make_rate_limiter, make_ws_rate_limiter
+from src.core.rate_limit import make_rate_limiter
 from .models import ChatsOrm
 from .schemas import (
     CreateChat, ChatsResponse, MessagesResponse,
@@ -70,11 +70,11 @@ async def get_chat_messages(
 
 @router.put("/{chat_id}/read", status_code=status.HTTP_204_NO_CONTENT)
 async def mark_read(
-    chat_id: uuid.UUID,
     user: UsersOrm = Depends(get_current_user),
     service: ChatsService = Depends(get_chats_service),
+    chat: ChatsOrm = Depends(get_chat)
 ):
-    await service.mark_read(chat_id, user.id)
+    await service.mark_read(chat, user.id)
 
 
 @router.delete("/{chat_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -112,7 +112,7 @@ async def get_my_chat_key(
 
 
 @router.websocket("/ws/{chat_id}",
-                   dependencies=[Depends(make_ws_rate_limiter(max_requests=20, window=60))])
+                   dependencies=[Depends(make_rate_limiter(max_requests=40, window=60))])
 async def chat_websocket(
     ws: WebSocket,
     chat_id: uuid.UUID,

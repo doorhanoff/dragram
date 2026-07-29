@@ -52,7 +52,9 @@ class ChatsService:
         if existing_chat:
             return existing_chat
         db_chat_data = CreateChatDb(members=members, name=data.name)
-        return await self.repo.create(db_chat_data)
+        chat = await self.repo.create(db_chat_data)
+        await self.repo.commit()
+        return chat
 
     async def upload_photo_for_chat(self, chat_id: uuid.UUID, photo: UploadFile, user: UsersOrm) -> ChatsOrm:
         chat = await self.repo.get_by_id(chat_id)
@@ -63,7 +65,9 @@ class ChatsService:
         if photo.content_type not in ALLOWED_IMAGE_TYPES:
             raise InvalidFileType
         image_url = await self.s3.upload_file(photo.file, photo.content_type)
-        return await self.repo.update_chat_image(chat_id, image_url)
+        updated = await self.repo.update_chat_image(chat_id, image_url)
+        await self.repo.commit()
+        return updated
 
     async def get_by_id(self, item_id: uuid.UUID) -> ChatsOrm | None:
         return await self.repo.get_by_id(item_id)
@@ -104,6 +108,7 @@ class ChatsService:
             if key.user_id not in member_ids:
                 raise KeyTargetNotMember
         await self.repo.set_chat_keys(chat_id, keys)
+        await self.repo.commit()
 
     async def get_my_chat_key(self, chat_id: uuid.UUID, user: UsersOrm):
         chat = await self.repo.get_by_id(chat_id)
@@ -132,8 +137,12 @@ class ChatsService:
         )
         msg = await self.repo.create_message(message_db)
 
+        await self.repo.commit()
+
         published_message = await self._publish_message(chat.id, msg)
         await self.notify_new_message(chat, user, published_message)
+
+        await self.repo.commit()
         return published_message
 
     async def send_media_message(
@@ -176,16 +185,20 @@ class ChatsService:
             data={"chat_id": str(chat.id), "event": "message"},
         )
 
-    async def mark_read(self, chat_id: uuid.UUID, reader_id: uuid.UUID) -> ReadEvent | None:
-        msg_ids = await self.repo.mark_read(chat_id, reader_id)
+    async def mark_read(self, chat: ChatsOrm, reader_id: uuid.UUID) -> ReadEvent | None:
+        if reader_id not in chat.members_ids:
+            raise NotChatMember()
+        msg_ids = await self.repo.mark_read(chat.id, reader_id)
+        await self.repo.commit()
         if not msg_ids:
             return None
         event = ReadEvent(message_ids=msg_ids, reader_id=reader_id)
-        await self.redis.publish(f"chat:{chat_id}", event.model_dump_json())
+        await self.redis.publish(f"chat:{chat.id}", event.model_dump_json())
         return event
 
     async def delete_message(self, message_id: uuid.UUID, sender_id: uuid.UUID, chat_id: uuid.UUID) -> DeleteEvent | None:
         deleted = await self.repo.delete_message(message_id, sender_id)
+        await self.repo.commit()
         if not deleted:
             return None
         if deleted.type in ("image", "video", "audio"):
@@ -196,7 +209,7 @@ class ChatsService:
 
     async def handle_incoming_event(self, data: dict, chat: ChatsOrm, user: UsersOrm) -> MessageEvent:
         if data.get("event") == "read":
-            await self.mark_read(chat.id, user.id)
+            await self.mark_read(chat, user.id)
         else:
             incoming = WSSendMessage.model_validate(data)
             await self.send_message(user, chat, text=incoming.text, type=incoming.type)

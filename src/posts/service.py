@@ -20,7 +20,9 @@ class PostsService:
         self.s3 = s3
 
     async def create(self, data: CreatePost, user_id: uuid.UUID) -> PostsOrm:
-        return await self.repo.create(data, user_id)
+        post = await self.repo.create(data, user_id)
+        await self.repo.commit()
+        return post
 
     async def get_by_id(self, item_id: uuid.UUID) -> PostsOrm | None:
         return await self.repo.get_by_id(item_id)
@@ -44,19 +46,25 @@ class PostsService:
         post = await self.repo.get_by_id(post_id)
         if not post:
             raise PostNotFound
-        return await self.repo.toggle_like(post_id, user_id)
+        liked = await self.repo.toggle_like(post_id, user_id)
+        await self.repo.commit()
+        return liked
 
     async def toggle_bookmark(self, post_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         post = await self.repo.get_by_id(post_id)
         if not post:
             raise PostNotFound
-        return await self.repo.toggle_bookmark(post_id, user_id)
+        bookmarked = await self.repo.toggle_bookmark(post_id, user_id)
+        await self.repo.commit()
+        return bookmarked
 
     async def add_comment(self, data: CreateComment, post_id: uuid.UUID, user_id: uuid.UUID):
         post = await self.repo.get_by_id(post_id)
         if not post:
             raise PostNotFound
-        return await self.repo.create_comment(data, post_id, user_id)
+        comment = await self.repo.create_comment(data, post_id, user_id)
+        await self.repo.commit()
+        return comment
 
     async def get_comments(self, post_id: uuid.UUID, limit: int, offset: int):
         post = await self.repo.get_by_id(post_id)
@@ -65,7 +73,9 @@ class PostsService:
         return await self.repo.get_comments(post_id, limit, offset)
 
     async def delete_comment(self, comment_id: uuid.UUID, user_id: uuid.UUID) -> bool:
-        return await self.repo.delete_comment(comment_id, user_id)
+        deleted = await self.repo.delete_comment(comment_id, user_id)
+        await self.repo.commit()
+        return deleted
 
     async def upload_media(self, post_id: uuid.UUID, files: list[UploadFile], user_id: uuid.UUID) -> PostsOrm:
         post = await self.repo.get_by_id(post_id)
@@ -82,4 +92,6 @@ class PostsService:
         urls = await asyncio.gather(*[
             self.s3.upload_file(f.file, f.content_type) for f in files
         ])
-        return await self.repo.add_media(post_id, list(urls))
+        updated = await self.repo.add_media(post_id, list(urls))
+        await self.repo.commit()
+        return updated

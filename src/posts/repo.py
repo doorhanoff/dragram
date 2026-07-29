@@ -2,14 +2,12 @@ import uuid
 import json
 from sqlalchemy import insert, select, update, delete, or_, func, exists
 from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
+from src.db.repository import BaseRepository
 from .models import PostsOrm, CommentsOrm, post_likes, post_bookmarks
 from .schemas import CreatePost, CreateComment
 
 
-class PostsRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+class PostsRepository(BaseRepository):
 
     async def create(self, data: CreatePost, user_id: uuid.UUID) -> PostsOrm:
         stmt = (
@@ -18,7 +16,6 @@ class PostsRepository:
             .returning(PostsOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         return res.scalar_one()
 
     async def get_by_id(self, item_id: uuid.UUID) -> PostsOrm | None:
@@ -152,12 +149,10 @@ class PostsRepository:
                     post_likes.c.user_id == user_id,
                 )
             )
-            await self.session.commit()
             return False
         await self.session.execute(
             insert(post_likes).values(post_id=post_id, user_id=user_id)
         )
-        await self.session.commit()
         return True
 
     async def toggle_bookmark(self, post_id: uuid.UUID, user_id: uuid.UUID) -> bool:
@@ -175,12 +170,10 @@ class PostsRepository:
                     post_bookmarks.c.user_id == user_id,
                 )
             )
-            await self.session.commit()
             return False
         await self.session.execute(
             insert(post_bookmarks).values(post_id=post_id, user_id=user_id)
         )
-        await self.session.commit()
         return True
 
     # ── Комментарии ───────────────────────────────────────────────────────────
@@ -197,7 +190,6 @@ class PostsRepository:
             .returning(CommentsOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         comment_id = res.scalar_one().id
         # Перезагружаем с автором и цитируемым комментарием (с его автором)
         result = await self.session.execute(
@@ -232,7 +224,6 @@ class PostsRepository:
             .returning(CommentsOrm.id)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         return res.scalar_one_or_none() is not None
 
     async def add_media(self, post_id: uuid.UUID, urls: list[str]) -> PostsOrm:
@@ -250,7 +241,6 @@ class PostsRepository:
             .returning(PostsOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         return res.scalar_one()
 
     async def get_all(self) -> list[PostsOrm]:

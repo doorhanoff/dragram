@@ -34,7 +34,9 @@ class AuthService:
             password_hash=hashed,
             description=credentials.description,
         )
-        return await self.repo.create_user(user)
+        created = await self.repo.create_user(user)
+        await self.repo.commit()
+        return created
 
     async def login(self, credentials: LoginForm) -> TokenPair | None:
         user = await self.repo.get_user_by_phone(credentials.phone_number)
@@ -89,20 +91,24 @@ class AuthService:
 
     async def set_key_backup(self, user_id: uuid.UUID, backup: str) -> None:
         await self.repo.set_key_backup(user_id, backup)
+        await self.repo.commit()
 
     async def get_key_backup(self, user_id: uuid.UUID) -> str | None:
         return await self.repo.get_key_backup(user_id)
 
     async def update_profile(self, user_id: uuid.UUID, form: UpdateProfileForm) -> None:
         await self.repo.update_profile(user_id, form)
+        await self.repo.commit()
 
     async def upload_avatar(self, user_id: uuid.UUID, file, s3) -> str:
         url = await s3.upload_file(file.file, file.content_type)
         await self.repo.update_avatar(user_id, url)
+        await self.repo.commit()
         return url
 
     async def set_public_key(self, user_id: uuid.UUID, public_key: str) -> None:
         await self.repo.set_public_key(user_id, public_key)
+        await self.repo.commit()
 
     async def get_public_key(self, user_id: uuid.UUID) -> str | None:
         return await self.repo.get_public_key(user_id)

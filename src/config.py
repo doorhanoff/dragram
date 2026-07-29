@@ -37,10 +37,17 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = ""
 
     # SSL для облачных БД (Supabase требует)
-    DB_SSL: bool = False
+    DB_SSL: bool = True
 
     # Firebase Cloud Messaging (push-уведомления)
     FCM_CREDENTIALS_JSON: str = ""
+
+    # Сколько доверенных прокси стоит перед приложением: балансировщик
+    # Render/Railway = 1, локально nginx из docker-compose = 1.
+    # Используется при разборе X-Forwarded-For — см. _client_ip в
+    # core/rate_limit.py. Если впереди появится ещё один слой (Cloudflare),
+    # значение надо увеличить, иначе лимитер увидит IP прокси вместо клиента.
+    TRUSTED_PROXY_COUNT: int = 1
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 

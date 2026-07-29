@@ -1,13 +1,11 @@
 import uuid
 from sqlalchemy import select, insert, delete, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from src.db.repository import BaseRepository
 from .models import AlbumsOrm, AlbumMaterialsOrm, album_members
 from .schemas import CreateAlbum
 
 
-class AlbumsRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+class AlbumsRepository(BaseRepository):
 
     async def create(self, data: CreateAlbum, user_id: uuid.UUID) -> AlbumsOrm:
         stmt = (
@@ -16,13 +14,11 @@ class AlbumsRepository:
             .returning(AlbumsOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         album_id = res.scalar_one().id
 
         await self.session.execute(
             insert(album_members).values(album_id=album_id, user_id=user_id)
         )
-        await self.session.commit()
 
         return await self.get_by_id(album_id)
 
@@ -67,7 +63,6 @@ class AlbumsRepository:
         await self.session.execute(
             insert(album_members).values(album_id=album_id, user_id=user_id)
         )
-        await self.session.commit()
 
     async def remove_member(self, album_id: uuid.UUID, user_id: uuid.UUID) -> None:
         await self.session.execute(
@@ -76,7 +71,6 @@ class AlbumsRepository:
                 album_members.c.user_id == user_id,
             )
         )
-        await self.session.commit()
 
     async def add_material(self, album_id: uuid.UUID, link: str, user_id: uuid.UUID) -> AlbumMaterialsOrm:
         stmt = (
@@ -85,7 +79,6 @@ class AlbumsRepository:
             .returning(AlbumMaterialsOrm)
         )
         res = await self.session.execute(stmt)
-        await self.session.commit()
         material_id = res.scalar_one().id
 
         result = await self.session.execute(

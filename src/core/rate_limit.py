@@ -1,61 +1,65 @@
-from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException, status
+import logging
+
+from fastapi import Depends, HTTPException, WebSocketException, status
+from fastapi.requests import HTTPConnection
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
+
+from src.config import settings
 from src.redis.depends import get_redis_client
+
+logger = logging.getLogger(__name__)
 
 
 def _client_ip(headers, client) -> str:
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+        hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+        if len(hops) >= settings.TRUSTED_PROXY_COUNT:
+            return hops[-settings.TRUSTED_PROXY_COUNT]
     return client.host if client else "unknown"
 
 
-def make_rate_limiter(max_requests: int = 60, window: int = 60):
-    """
-    Sliding-window rate limiter per (IP, path) через Redis INCR + EXPIRE.
+def _route_path(scope) -> str:
 
-    Использование:
-        @router.post("/login", dependencies=[Depends(make_rate_limiter(5, 60))])
-    """
+    route = scope.get("route")
+    return getattr(route, "path", None) or scope.get("path", "")
+
+
+async def _hit(redis: Redis, key: str, window: int) -> int | None:
+    try:
+        pipe = redis.pipeline()
+        pipe.set(key, 0, ex=window, nx=True)
+        pipe.incr(key)
+        _, count = await pipe.execute()
+        return count
+    except RedisError as exc:
+        logger.warning("Rate limiter unavailable, letting request through: %s", exc)
+        return None
+
+
+def _too_many_requests(window: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=f"Слишком много запросов. Попробуйте через {window} секунд.",
+        headers={"Retry-After": str(window)},
+    )
+
+
+def make_rate_limiter(max_requests: int = 60, window: int = 60):
     async def rate_limiter(
-        request: Request,
+        conn: HTTPConnection,
         redis: Redis = Depends(get_redis_client),
     ) -> None:
-        # Учитываем реальный IP за Nginx (X-Forwarded-For)
-        client_ip = _client_ip(request.headers, request.client)
-        key   = f"rl:{client_ip}:{request.url.path}"
-        count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, window)
-        if count > max_requests:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Слишком много запросов. Попробуйте через {window} секунд.",
-                headers={"Retry-After": str(window)},
-            )
+        client_ip = _client_ip(conn.headers, conn.client)
+        key = f"rl:ip:{client_ip}:{_route_path(conn.scope)}"
+        count = await _hit(redis, key, window)
+        if count is None or count <= max_requests:
+            return
+        if conn.scope["type"] == "websocket":
+            raise WebSocketException(code=4029, reason="Too many connection attempts")
+        raise _too_many_requests(window)
 
     return rate_limiter
 
 
-def make_ws_rate_limiter(max_requests: int = 20, window: int = 60):
-    """
-    Тот же принцип, что и make_rate_limiter (Redis INCR + EXPIRE по IP и пути),
-    но для WebSocket: ограничивает частоту ПОПЫТОК ПОДКЛЮЧЕНИЯ, а не сообщений
-    внутри уже открытого сокета.
-
-    Использование:
-        @router.websocket("/ws/{chat_id}", dependencies=[Depends(make_ws_rate_limiter(20, 60))])
-    """
-    async def ws_rate_limiter(
-        websocket: WebSocket,
-        redis: Redis = Depends(get_redis_client),
-    ) -> None:
-        client_ip = _client_ip(websocket.headers, websocket.client)
-        key   = f"rl:ws:{client_ip}:{websocket.url.path}"
-        count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, window)
-        if count > max_requests:
-            raise WebSocketException(code=4029, reason="Too many connection attempts")
-
-    return ws_rate_limiter
