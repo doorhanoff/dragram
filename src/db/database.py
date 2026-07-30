@@ -13,8 +13,8 @@ class Base(DeclarativeBase):
 connect_args: dict = {"server_settings": {"search_path": "public"}}
 if db_settings.DB_SSL:
     ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = True
-    ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
     connect_args["ssl"] = ssl_ctx
 
 async_engine = create_async_engine(
@@ -32,10 +32,6 @@ async_session = async_sessionmaker(async_engine, expire_on_commit=False)
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    # Транзакцию закрывает сервисный слой через repo.commit() — см.
-    # src/db/repository.py. Незакоммиченные изменения откатываются сами:
-    # выход из async with вызывает session.close(), а он завершает
-    # незавершённую транзакцию.
     async with async_session() as session:
         yield session
 
