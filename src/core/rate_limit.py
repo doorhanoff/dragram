@@ -15,8 +15,7 @@ def _client_ip(headers, client) -> str:
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for:
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
-        if len(hops) >= settings.TRUSTED_PROXY_COUNT:
-            return hops[-settings.TRUSTED_PROXY_COUNT]
+        return hops[-1]
     return client.host if client else "unknown"
 
 

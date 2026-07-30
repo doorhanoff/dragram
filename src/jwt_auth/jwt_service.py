@@ -241,7 +241,7 @@ class JWTManager:
         try:
             raw = self._decode(token)
         except JWTError:
-            raise TokenInvalidError(f"Token jti={token} cannot be revoked.")
+            raise TokenInvalidError(f"Token cannot be revoked.")
         token_type = TokenType(raw["token_type"])
         ttl = max(int(raw["exp"]) - int(time.time()), 1)
         await self.redis.set(
