@@ -134,7 +134,12 @@ export async function deriveSharedKey(myPrivateKey, theirPublicKeyBase64) {
     { name: 'ECDH', public: theirKey },
     myPrivateKey,
     { name: 'AES-GCM', length: 256 },
-    false,
+    // extractable: нужен exportRawKey() — ключ чата отдаётся нативному коду,
+    // чтобы тот расшифровывал push, пока WebView не запущен.
+    // Личный ECDH-ключ при этом остаётся non-extractable: он один защищает
+    // все прошлые и будущие чаты, а ключ чата XSS всё равно может
+    // переполучить через deriveKey.
+    true,
     ['encrypt', 'decrypt']
   )
 }
@@ -181,8 +186,17 @@ export async function decryptGroupKey(encryptedBase64, myPrivateKey) {
     'raw', b64dec(ct), unwrapKey,
     { name: 'AES-GCM', iv: b64dec(iv) },
     { name: 'AES-GCM', length: 256 },
-    false, ['encrypt', 'decrypt']
+    true,  // см. комментарий в deriveSharedKey
+    ['encrypt', 'decrypt']
   )
+}
+
+/**
+ * Экспортирует AES-ключ чата в base64 — для передачи нативному коду Android,
+ * который расшифровывает push-уведомления без запущенного WebView.
+ */
+export async function exportRawKey(aesKey) {
+  return b64enc(await crypto.subtle.exportKey('raw', aesKey))
 }
 
 // ── Бэкап приватного ключа (PBKDF2 + AES-GCM) ────────────────────────────

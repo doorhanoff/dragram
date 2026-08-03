@@ -1,14 +1,22 @@
-class AlbumNotFound(Exception):
-    pass
+from fastapi import HTTPException, status
 
 
-class NotAlbumMember(Exception):
-    pass
+class AlbumNotFound(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Album not found")
 
 
-class NotAlbumOwner(Exception):
-    pass
+class NotAlbumMember(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this album")
 
 
-class InvalidFileType(Exception):
-    pass
+class NotAlbumOwner(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="Not the album owner")
+
+
+class InvalidFileType(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST,
+                         detail="Allowed types: jpeg, png, webp, gif, mp4, webm")

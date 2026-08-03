@@ -1,7 +1,7 @@
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, Request, HTTPException, WebSocket, WebSocketException, status
-from src.db.database import get_async_session
+from src.db.database import async_session, get_async_session
 from src.jwt_auth.depends import get_jwt_manager
 from src.jwt_auth.jwt_service import JWTManager, JWTError, TokenExpiredError, TokenInvalidError, TokenRevokedError
 from .repo import AuthRepository
@@ -42,6 +42,22 @@ async def get_token_payload(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+async def get_optional_token_payload(
+    request: Request,
+    service: AuthService = Depends(get_auth_service),
+) -> TokenData | None:
+    """Опциональная аутентификация: для эндпоинтов, доступных и без входа,
+    но персонализирующих ответ для вошедших. Любая проблема с токеном —
+    просто аноним, без 401."""
+    token = _extract_token(request)
+    if not token:
+        return None
+    try:
+        return await service.get_token_payload(token)
+    except Exception:
+        return None
+
+
 def _extract_token(request: Request) -> str | None:
     """Принимает токен из куки (веб) или Authorization: Bearer (мобильное)."""
     token = request.cookies.get("token")
@@ -74,13 +90,24 @@ async def get_current_user(
 
 async def ws_get_current_user(
     websocket: WebSocket,
-    service: AuthService = Depends(get_auth_service),
+    jwt_manager: JWTManager = Depends(get_jwt_manager),
+    redis: Redis = Depends(get_redis_client),
 ) -> UsersOrm:
+    """Аутентификация websocket-соединения.
+
+    Сессию БД открываем прямо здесь и сразу закрываем, а не берём через
+    Depends(get_auth_service): зависимость с yield живёт столько же, сколько
+    само соединение, и коннект из пула был бы занят всё время, пока открыт чат.
+    Пользователь загружается вместе с чатами и участниками (selectinload), так
+    что после закрытия сессии объект остаётся пригодным для чтения.
+    """
     token = websocket.cookies.get("token") or websocket.query_params.get("token")
     if not token:
         raise WebSocketException(code=4001, reason="Not authenticated")
     try:
-        user = await service.get_user_data_by_token(token)
+        async with async_session() as session:
+            service = AuthService(AuthRepository(session), jwt_manager, redis)
+            user = await service.get_user_data_by_token(token)
         if not user:
             raise WebSocketException(code=4001, reason="User not found")
         return user

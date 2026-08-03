@@ -12,10 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 def _client_ip(headers, client) -> str:
+    """Fixed-window лимитер по IP. X-Forwarded-For нельзя брать целиком —
+    клиент может дописать в него что угодно. Доверяем только последним
+    TRUSTED_PROXY_COUNT значениям: их дописали наши прокси, и N-е с конца —
+    это адрес, с которого реально пришли к первому доверенному прокси."""
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for:
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
-        return hops[-1]
+        trusted = max(settings.TRUSTED_PROXY_COUNT, 1)
+        if hops:
+            return hops[-trusted] if len(hops) >= trusted else hops[0]
     return client.host if client else "unknown"
 
 

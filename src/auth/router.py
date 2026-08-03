@@ -2,9 +2,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, UploadFile, status
 
+from src.config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE
 from src.core.rate_limit import make_rate_limiter
 from src.jwt_auth.jwt_service import JWTError
 from src.s3.depends import get_s3_service
+from src.s3.exceptions import FileTooLarge
 from src.s3.service import S3Service
 from .depends import get_auth_service, get_token_payload, get_current_user
 from .models import UsersOrm
@@ -12,18 +14,15 @@ from .schemas import RegisterForm, LoginForm, TokenData, UserShortResponse, Upda
     KeyBackupBody
 from .service import AuthService
 
-ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(make_rate_limiter(max_requests=10, window=3600))])
 async def register(credentials: RegisterForm, service: AuthService = Depends(get_auth_service)):
+    # Занятый номер телефона обрывает register() исключением
+    # UserAlreadyExistsError (409) ещё в репозитории.
     user = await service.register(credentials)
-    if not user:
-        raise HTTPException(status_code=400, detail="User already exists")
     return {"id": user.id}
 
 
@@ -80,10 +79,12 @@ async def me(
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
 async def heartbeat(
-    user: UsersOrm = Depends(get_current_user),
+    payload: TokenData = Depends(get_token_payload),
     service: AuthService = Depends(get_auth_service),
 ):
-    await service.set_user_online(user.id)
+    # Дёргается фронтендом каждые ~25 секунд: достаточно id из токена,
+    # полный get_current_user с загрузкой всех чатов здесь ни к чему.
+    await service.set_user_online(payload.id)
 
 
 @router.get("/users/{user_id}", response_model=UserShortResponse)
@@ -97,8 +98,8 @@ async def get_user(
 
 
 @router.get("/users", response_model=list[UserShortResponse])
-async def get_users(search_text: str | None, limit: int = 10, offset: int = 0, user: UsersOrm = Depends(get_current_user), service: AuthService = Depends(get_auth_service)):
-    return await service.search_users(search_text, limit, offset)
+async def get_users(search_text: str | None = None, limit: int = 10, offset: int = 0, user: UsersOrm = Depends(get_current_user), service: AuthService = Depends(get_auth_service)):
+    return await service.search_users(search_text, limit=limit, offset=offset)
 
 
 @router.put("/me/public-key", status_code=status.HTTP_204_NO_CONTENT)
@@ -149,8 +150,10 @@ async def upload_avatar(
     service: AuthService = Depends(get_auth_service),
     s3: S3Service = Depends(get_s3_service),
 ):
-    if photo.content_type not in ALLOWED_AVATAR_TYPES:
+    if photo.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Allowed: jpeg, png, webp")
+    if photo.size and photo.size > MAX_FILE_SIZE:
+        raise FileTooLarge()
     await service.upload_avatar(user.id, photo, s3)
 
 

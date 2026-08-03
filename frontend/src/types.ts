@@ -28,6 +28,9 @@ export interface Chat {
 export interface Message {
   id?: string
   _id?: string
+  // Локальный id оптимистично показанного сообщения; сервер возвращает его
+  // в эхе, чтобы заменить временное сообщение настоящим, а не дублировать
+  client_id?: string
   text: string
   type: 'text' | 'image' | 'video' | 'audio'
   sender_id?: string
@@ -37,6 +40,7 @@ export interface Message {
   thumbnail_url?: string | null
   date?: string
   created_at?: string
+  _msgStatus?: string
 }
 
 export interface Post {

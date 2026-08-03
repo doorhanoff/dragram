@@ -56,7 +56,10 @@ class AuthRepository(BaseRepository):
         return result.scalar_one_or_none()
 
     async def update_profile(self, user_id: uuid.UUID, profile_data: UpdateProfileForm) -> None:
-        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(profile_data.model_dump())
+        values = profile_data.model_dump(exclude_unset=True)
+        if not values:
+            return
+        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(values)
         await self.session.execute(stmt)
 
     async def update_avatar(self, user_id: uuid.UUID, image_url: str) -> None:

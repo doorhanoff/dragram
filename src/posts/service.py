@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import UploadFile
@@ -6,12 +7,9 @@ from .repo import PostsRepository
 from .schemas import CreatePost, CreateComment
 from .models import PostsOrm
 from .exceptions import PostNotFound, NotPostOwner, InvalidFileType
+from ..s3.exceptions import FileTooLarge, ProblemWithUploadingFiles
 from ..s3.service import S3Service
-
-ALLOWED_MEDIA_TYPES = {
-    "image/jpeg", "image/png", "image/webp", "image/gif",
-    "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo",
-}
+from src.config import ALLOWED_MEDIA_TYPES, MAX_FILE_SIZE
 
 
 class PostsService:
@@ -87,11 +85,21 @@ class PostsService:
         invalid = [f.filename for f in files if f.content_type not in ALLOWED_MEDIA_TYPES]
         if invalid:
             raise InvalidFileType
+        if any(f.size and f.size > MAX_FILE_SIZE for f in files):
+            raise FileTooLarge()
 
-        import asyncio
-        urls = await asyncio.gather(*[
-            self.s3.upload_file(f.file, f.content_type) for f in files
-        ])
-        updated = await self.repo.add_media(post_id, list(urls))
+        results = await asyncio.gather(
+            *[self.s3.upload_file(f.file, f.content_type) for f in files],
+            return_exceptions=True,
+        )
+        failed = [r for r in results if isinstance(r, BaseException)]
+        urls = [r for r in results if not isinstance(r, BaseException)]
+        if failed:
+            # Не оставляем в S3 файлы, на которые не будет записей в БД
+            for url in urls:
+                await self.s3.delete_file(url)
+            raise ProblemWithUploadingFiles()
+
+        updated = await self.repo.add_media(post_id, urls)
         await self.repo.commit()
         return updated

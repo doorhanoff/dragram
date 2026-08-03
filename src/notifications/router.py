@@ -24,4 +24,4 @@ async def unregister_device(
     user: UsersOrm = Depends(get_current_user),
     service: NotificationsService = Depends(get_notifications_service),
 ):
-    await service.unregister_token(data.token)
+    await service.unregister_token(user.id, data.token)

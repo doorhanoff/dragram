@@ -5,7 +5,10 @@ import json
 from fastapi import APIRouter, Depends, UploadFile, HTTPException, status, File, WebSocket, WebSocketDisconnect, WebSocketException
 from redis.asyncio import Redis
 
-from .depends import get_chats_service, get_chat, ws_get_chat
+from .depends import (
+    get_chats_service, get_chat, ws_get_chat,
+    ChatsServiceFactory, get_chats_service_factory,
+)
 from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember
 from src.core.rate_limit import make_rate_limiter
 from .models import ChatsOrm
@@ -108,6 +111,10 @@ async def get_my_chat_key(
 ):
 
     key = await service.get_my_chat_key(chat_id, user)
+    if key is None:
+        # Штатная ситуация: участника добавили, а set_chat_keys для него ещё
+        # не вызывали — как и для key-backup/public-key в auth, это 404.
+        raise HTTPException(status_code=404, detail="Chat key not found")
     return {"encrypted_key": key.encrypted_key}
 
 
@@ -116,17 +123,20 @@ async def get_my_chat_key(
 async def chat_websocket(
     ws: WebSocket,
     chat_id: uuid.UUID,
-    service: ChatsService = Depends(get_chats_service),
+    make_service: ChatsServiceFactory = Depends(get_chats_service_factory),
     user: UsersOrm = Depends(ws_get_current_user),
     chat: ChatsOrm = Depends(ws_get_chat),
 ):
 
     await ws.accept()
 
-    async with service.get_pubsub_connection(chat_id) as conn:
+    async with make_service.pubsub(chat_id) as conn:
         async def write_messages():
             async for raw in ws.iter_json():
-                await service.handle_incoming_event(raw, chat, user)
+                # Сессия БД берётся из пула на время обработки одного события
+                # и сразу возвращается: открытый чат не должен занимать коннект.
+                async with make_service() as service:
+                    await service.handle_incoming_event(raw, chat, user)
         async def broadcast_messages():
             async for message in conn.listen():
                 await ws.send_json(message)
@@ -140,7 +150,8 @@ async def chat_websocket(
 
 
 
-@router.post("/{chat_id}/forward", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{chat_id}/forward", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(make_rate_limiter(max_requests=40, window=60))])
 async def forward_message(
     data: ForwardMessage,
     chat: ChatsOrm = Depends(get_chat),
@@ -148,6 +159,8 @@ async def forward_message(
     service: ChatsService = Depends(get_chats_service),
 ):
     await service.forward_message(user, data, chat)
+
+
 @router.post("/{chat_id}/upload", response_model=dict)
 async def send_media_message(
     file: UploadFile = File(...),

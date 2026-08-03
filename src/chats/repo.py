@@ -91,6 +91,21 @@ class ChatsRepository(BaseRepository):
         result = await self.session.execute(select(MessagesOrm).where(MessagesOrm.id == msg_id))
         return result.scalar_one()
 
+    async def unread_counts(self, chat_ids: list[uuid.UUID], reader_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        if not chat_ids:
+            return {}
+        query = (
+            select(MessagesOrm.chat_id, func.count())
+            .where(
+                MessagesOrm.chat_id.in_(chat_ids),
+                MessagesOrm.is_read == False,
+                MessagesOrm.sender_id != reader_id,
+            )
+            .group_by(MessagesOrm.chat_id)
+        )
+        res = await self.session.execute(query)
+        return {chat_id: count for chat_id, count in res.all()}
+
     async def mark_read(self, chat_id: uuid.UUID, reader_id: uuid.UUID) -> list[uuid.UUID]:
         stmt = (
             update(MessagesOrm)
@@ -109,11 +124,17 @@ class ChatsRepository(BaseRepository):
         res = await self.session.execute(select(MessagesOrm).where(MessagesOrm.id == message_id))
         return res.scalar_one_or_none()
 
-    async def delete_message(self, message_id: uuid.UUID, sender_id: uuid.UUID) -> MessagesOrm | None:
-        """Удаляет сообщение. Только отправитель может удалить. Возвращает удалённое сообщение или None."""
+    async def delete_message(self, message_id: uuid.UUID, sender_id: uuid.UUID, chat_id: uuid.UUID) -> MessagesOrm | None:
+        """Удаляет сообщение. Только отправитель может удалить, и только в том
+        чате, что указан в URL — иначе DeleteEvent улетит не в тот канал.
+        Возвращает удалённое сообщение или None."""
         stmt = (
             delete(MessagesOrm)
-            .where(MessagesOrm.id == message_id, MessagesOrm.sender_id == sender_id)
+            .where(
+                MessagesOrm.id == message_id,
+                MessagesOrm.sender_id == sender_id,
+                MessagesOrm.chat_id == chat_id,
+            )
             .returning(MessagesOrm)
         )
         res = await self.session.execute(stmt)

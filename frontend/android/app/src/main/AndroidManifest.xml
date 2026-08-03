@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -60,6 +61,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Свой обработчик FCM: сервер шлёт data-only push, и уведомление
+             с расшифрованным текстом рисует DragramMessagingService.
+             Сервис из @capacitor/push-notifications убираем из манифеста —
+             иначе FCM доставлял бы сообщения ему, а не нам. События в JS
+             при этом не теряются: наш сервис его наследует и вызывает super. -->
+        <service
+            android:name=".DragramMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

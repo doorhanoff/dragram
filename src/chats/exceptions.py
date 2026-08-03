@@ -18,4 +18,9 @@ class InvalidFileType(HTTPException):
 
 class KeyTargetNotMember(HTTPException):
     def __init__(self):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail="Key target is not a chat member")
+
+
+class TooLargeSize(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File size is too large")

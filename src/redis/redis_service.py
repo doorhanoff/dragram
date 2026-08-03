@@ -67,10 +67,13 @@ async def init_redis():
 
 
 async def close_redis():
+    global _redis, _redis_pubsub
     if _redis:
         await _redis.aclose()
+        _redis = None
     if _redis_pubsub:
         await _redis_pubsub.aclose()
+        _redis_pubsub = None
 
 
 def get_redis() -> redis.Redis:

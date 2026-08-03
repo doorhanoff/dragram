@@ -66,10 +66,13 @@ class AuthService:
         return await self.repo.get_user_by_id(uuid.UUID(payload.sub))
 
     async def revoke_token(self, token: str) -> None:
+        # Best-effort: невалидный или истёкший токен и так не даст доступа,
+        # ошибка здесь не должна ломать выход из аккаунта (куки всё равно
+        # надо очистить). Истёкший refresh — самый частый повод для logout.
         try:
             await self.jwt_manager.revoke_token(token)
         except TokenInvalidError:
-            raise InvalidTokenError()
+            pass
 
     async def refresh_access_token(self, refresh_token: str) -> TokenPair | None:
         try: payload = await self.jwt_manager.verify_token(refresh_token, expected_type=TokenType.REFRESH)
@@ -79,13 +82,15 @@ class AuthService:
             raise UserNotFoundError()
         return await self.jwt_manager.refresh_access_token(refresh_token=refresh_token)
 
-    async def search_users(self, search_text: str | None, offset: int = 0, limit: int = 10) -> list[UserShortResponse]:
-        users = await self.repo.search(search_text, offset, limit)
+    async def search_users(self, search_text: str | None, limit: int = 10, offset: int = 0) -> list[UserShortResponse]:
+        users = await self.repo.search(search_text, limit=limit, offset=offset)
+        if not users:
+            return []
+        online_flags = await self.redis.mget([f"online:{u.id}" for u in users])
         results = []
-        for u in users:
-            is_online = await self.redis.exists(f"online:{u.id}")
+        for u, online in zip(users, online_flags):
             response = UserShortResponse.model_validate(u)
-            response.is_active = bool(is_online)
+            response.is_active = online is not None
             results.append(response)
         return results
 

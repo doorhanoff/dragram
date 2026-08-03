@@ -5,10 +5,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/auth':  { target: 'http://localhost:8000', changeOrigin: true },
-      '/chats': { target: 'http://localhost:8000', changeOrigin: true, ws: true },
-      '/posts': { target: 'http://localhost:8000', changeOrigin: true },
-      '/push':  { target: 'http://localhost:8000', changeOrigin: true },
+      '/auth':          { target: 'http://localhost:8000', changeOrigin: true },
+      '/chats':         { target: 'http://localhost:8000', changeOrigin: true, ws: true },
+      '/posts':         { target: 'http://localhost:8000', changeOrigin: true },
+      '/albums':        { target: 'http://localhost:8000', changeOrigin: true },
+      '/notifications': { target: 'http://localhost:8000', changeOrigin: true },
+      '/push':          { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 })

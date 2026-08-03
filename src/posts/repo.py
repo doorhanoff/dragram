@@ -41,32 +41,6 @@ class PostsRepository(BaseRepository):
         user_id: uuid.UUID | None = None,
     ) -> list[dict]:
         """Возвращает посты с likes_count, is_liked, is_bookmarked."""
-        likes_count_sq = (
-            select(func.count())
-            .where(post_likes.c.post_id == PostsOrm.id)
-            .correlate(PostsOrm)
-            .scalar_subquery()
-        )
-        is_liked_sq = (
-            select(func.count())
-            .where(
-                post_likes.c.post_id == PostsOrm.id,
-                post_likes.c.user_id == user_id,
-            )
-            .correlate(PostsOrm)
-            .scalar_subquery()
-        ) if user_id else None
-
-        is_bm_sq = (
-            select(func.count())
-            .where(
-                post_bookmarks.c.post_id == PostsOrm.id,
-                post_bookmarks.c.user_id == user_id,
-            )
-            .correlate(PostsOrm)
-            .scalar_subquery()
-        ) if user_id else None
-
         query = select(PostsOrm).options(selectinload(PostsOrm.created_by))
 
         if text:
@@ -228,7 +202,12 @@ class PostsRepository(BaseRepository):
 
     async def add_media(self, post_id: uuid.UUID, urls: list[str]) -> PostsOrm:
         """Добавляет список URL медиафайлов в materials поста."""
-        post = await self.get_by_id(post_id)
+        # FOR UPDATE: read-modify-write по JSON-колонке; без блокировки два
+        # параллельных вызова затирают загрузки друг друга.
+        res = await self.session.execute(
+            select(PostsOrm).where(PostsOrm.id == post_id).with_for_update()
+        )
+        post = res.scalar_one()
         try:
             current = json.loads(post.materials) if post.materials else []
         except (TypeError, ValueError):

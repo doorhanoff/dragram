@@ -1,5 +1,5 @@
 from .jwt_service import JWTManager
-from src.redis.depends import get_redis as get_redis_client
+from src.redis.depends import get_redis_client
 from src.config import settings
 import redis.asyncio as redis
 from fastapi import Depends

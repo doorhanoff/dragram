@@ -62,8 +62,11 @@ class PostsOrm(Base):
     created_by: Mapped["UsersOrm"] = relationship(
         "UsersOrm", foreign_keys=[created_by_id], back_populates="created_posts", lazy="selectin"
     )
+    # noload: комментарии не входят ни в один ответ по постам и отдаются
+    # только пагинированным get_comments — грузить их на каждый пост ленты
+    # незачем.
     comments: Mapped[list["CommentsOrm"]] = relationship(
-        "CommentsOrm", foreign_keys="CommentsOrm.post_id", lazy="selectin", cascade="all, delete-orphan"
+        "CommentsOrm", foreign_keys="CommentsOrm.post_id", lazy="noload", cascade="all, delete-orphan"
     )
     liked_by: Mapped[list["UsersOrm"]] = relationship(
         "UsersOrm", secondary=post_likes, lazy="noload"

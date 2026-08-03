@@ -92,6 +92,10 @@ class WSSendMessage(BaseModel):
     event: Literal["message"] = "message"
     text: str
     type: Literal["text", "image", "video", "audio"] = "text"
+    # Клиентский id для оптимистичного UI: сервер не хранит его, а просто
+    # возвращает в MessageEvent, чтобы отправитель сопоставил эхо со своим
+    # локально показанным сообщением вместо дубля.
+    client_id: str | None = Field(default=None, max_length=64)
 
 
 class MessageEvent(BaseModel):
@@ -104,9 +108,10 @@ class MessageEvent(BaseModel):
     sender_name: str | None = None
     is_read: bool = False
     date: datetime.datetime
+    client_id: str | None = None
 
     @classmethod
-    def from_message(cls, msg) -> "MessageEvent":
+    def from_message(cls, msg, client_id: str | None = None) -> "MessageEvent":
         return cls(
             id=msg.id,
             text=msg.text,
@@ -116,6 +121,7 @@ class MessageEvent(BaseModel):
             sender_name=msg.sender.name if msg.sender else None,
             is_read=msg.is_read,
             date=msg.created_at,
+            client_id=client_id,
         )
 
 

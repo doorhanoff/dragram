@@ -33,7 +33,7 @@ interface Props {
   messages: Message[]
   setMessages: React.Dispatch<React.SetStateAction<Record<string, Message[]>>>
   userId: string
-  onSend: (text: string) => void
+  onSend: (text: string) => Promise<boolean>
   onBack?: () => void
   onStartChat?: (userId: string) => void
 }
@@ -68,9 +68,12 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
 
   useEffect(() => { if (chatId) api.markRead(chatId).catch(() => {}) }, [chatId])
 
-  function send() {
+  async function send() {
     if (!text.trim()) return
-    onSend(text.trim())
+    const ok = await onSend(text.trim())
+    // Сокет мог быть в реконнекте — сообщение не ушло, текст не трогаем,
+    // чтобы пользователь мог отправить повторно, а не набирать заново
+    if (!ok) return
     setText('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
@@ -178,7 +181,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   messages.forEach((m, i) => {
     const day = fmtDay(m.date || m.created_at)
     if (day && day !== lastDay) { items.push({ type: 'divider', day, key: `d${i}` }); lastDay = day }
-    items.push({ type: 'msg', msg: m, key: (m.id || (m as any)._id || String(i)) })
+    items.push({ type: 'msg', msg: m, key: (m.id || (m as any)._id || m.client_id || String(i)) })
   })
 
   const title   = chatName(chat, userId)

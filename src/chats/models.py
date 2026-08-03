@@ -48,8 +48,11 @@ class ChatsOrm(Base):
 
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
+    # noload: история может быть сколь угодно большой, грузить её целиком
+    # при каждом обращении к чату нельзя. Сообщения отдаёт только
+    # get_messages_paginated, счётчик непрочитанных — unread_counts.
     messages: Mapped[list["MessagesOrm"]] = relationship(
-        "MessagesOrm", foreign_keys="MessagesOrm.chat_id", back_populates="chat", lazy="selectin"
+        "MessagesOrm", foreign_keys="MessagesOrm.chat_id", back_populates="chat", lazy="noload"
     )
 
     members: Mapped[list["UsersOrm"]] = relationship(

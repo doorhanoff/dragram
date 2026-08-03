@@ -5,6 +5,7 @@ import {
   deriveSharedKey, generateGroupKey, encryptGroupKey, decryptGroupKey,
   encryptMessage, decryptMessage, encryptKeyBackup, decryptKeyBackup,
 } from './crypto'
+import { syncChatKey, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 
 import Auth              from './components/Auth'
 import Sidebar           from './components/layout/Sidebar'
@@ -146,6 +147,7 @@ export default function App() {
       if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
       wsRef.current?.close(); activeChatRef.current = null
       loadedChats.current.clear(); chatKeysRef.current.clear()
+      clearNativeKeys()
       setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
     }
     window.addEventListener('auth:expired', h)
@@ -243,6 +245,29 @@ export default function App() {
     return () => clearInterval(id)
   }, [user, loadChats])
 
+  // Отдаём нативному коду ключи ВСЕХ чатов, а не только открытых: push может
+  // прийти из чата, который на этом устройстве ещё ни разу не открывали,
+  // и расшифровать текст уведомления будет нечем.
+  // Зависимость — список id, а не сам массив: иначе эффект перезапускался бы
+  // на каждом опросе loadChats каждые 15 секунд.
+  const chatIdsKey = chats.map(c => c.id).join(',')
+  useEffect(() => {
+    if (!user || !keyPairRef.current) return
+    let cancelled = false
+    ;(async () => {
+      for (const chat of chatsRef.current) {
+        if (cancelled || !keyPairRef.current) return
+        // Уже в chatKeysRef — значит ключ синхронизировали при его получении.
+        if (chatKeysRef.current.has(chat.id)) continue
+        const key = await resolveChatKey(chat, userIdRef.current!, keyPairRef.current).catch(() => null)
+        if (!key) continue
+        chatKeysRef.current.set(chat.id, key)
+        await syncChatKey(chat.id, key)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id, chatIdsKey])
+
   // Статус "в сети" хранится в Redis по TTL (см. AuthService.set_user_online) —
   // без периодического heartbeat он погаснет через минуту после входа
   useEffect(() => {
@@ -305,10 +330,15 @@ export default function App() {
           : result.text ?? data.text
       }
 
-      setMessages(prev => ({
-        ...prev,
-        [chatId]: [...(prev[chatId] || []), { ...data, text, _msgStatus }],
-      }))
+      setMessages(prev => {
+        const list = prev[chatId] || []
+        const incoming = { ...data, text, _msgStatus }
+        // Эхо собственного сообщения: заменяем оптимистично показанное
+        // (сопоставление по client_id), чтобы не было дубля
+        const idx = data.client_id ? list.findIndex(m => m.client_id === data.client_id) : -1
+        const next = idx >= 0 ? list.map((m, i) => i === idx ? incoming : m) : [...list, incoming]
+        return { ...prev, [chatId]: next }
+      })
     }
 
     ws.onclose = () => {
@@ -339,11 +369,16 @@ export default function App() {
     setCurrentChatId(chatId); activeChatRef.current = chatId; setMobileScreen('detail')
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c))
 
+    clearChatNotifications(chatId)
+
     if (keyPairRef.current && !chatKeysRef.current.has(chatId)) {
       const chat = chatObj || chatsRef.current.find(c => c.id === chatId)
       if (chat) {
         const key = await resolveChatKey(chat, userIdRef.current!, keyPairRef.current).catch(() => null)
-        if (key) chatKeysRef.current.set(chatId, key)
+        if (key) {
+          chatKeysRef.current.set(chatId, key)
+          syncChatKey(chatId, key)
+        }
       }
     }
 
@@ -359,11 +394,38 @@ export default function App() {
   }, [connectWS])
 
   // ── Send ──────────────────────────────────────────────────────────────────
-  const sendMessage = useCallback(async (text: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
-    const key = chatKeysRef.current.get(activeChatRef.current!)
+  // Возвращает false, если сообщение НЕ ушло (сокет переподключается) —
+  // вызывающий не должен очищать поле ввода, иначе текст молча потеряется
+  const sendMessage = useCallback(async (text: string): Promise<boolean> => {
+    const chatId = activeChatRef.current
+    if (!chatId || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false
+    const key = chatKeysRef.current.get(chatId)
     const enc = key ? await encryptMessage(text, key) : text
-    wsRef.current.send(JSON.stringify({ text: enc }))
+    const clientId = crypto.randomUUID()
+    // Оптимистично показываем своё сообщение сразу; эхо от сервера
+    // заменит его настоящим (сопоставление по client_id в ws.onmessage)
+    setMessages(prev => ({
+      ...prev,
+      [chatId]: [...(prev[chatId] || []), {
+        client_id: clientId,
+        text,
+        type: 'text' as const,
+        sender_id: userIdRef.current || undefined,
+        is_read: false,
+        date: new Date().toISOString(),
+        _msgStatus: 'pending',
+      }],
+    }))
+    try {
+      wsRef.current.send(JSON.stringify({ text: enc, client_id: clientId }))
+    } catch {
+      setMessages(prev => ({
+        ...prev,
+        [chatId]: (prev[chatId] || []).filter(m => m.client_id !== clientId),
+      }))
+      return false
+    }
+    return true
   }, [])
 
   // ── Start chat ────────────────────────────────────────────────────────────
@@ -379,6 +441,7 @@ export default function App() {
 
         // Сохраняем K локально СРАЗУ — независимо от того, удалось ли загрузить на сервер
         chatKeysRef.current.set(chat.id, K)
+        syncChatKey(chat.id, K)
 
         const keys = (await Promise.all(allIds.map(async (uid: string) => {
           try {
@@ -400,6 +463,7 @@ export default function App() {
     if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
     wsRef.current?.close(); activeChatRef.current = null
     loadedChats.current.clear(); chatKeysRef.current.clear()
+    clearNativeKeys()
     setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
   }, [])
 

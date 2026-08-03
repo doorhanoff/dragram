@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     JWT_ACCESS_TTL:  int = 900     # 15 минут
     JWT_REFRESH_TTL: int = 604_800 # 7 дней
 
-    # Admin seed
-    ADMIN_EMAIL: str = "admin@admin.com"
-    ADMIN_PASSWORD: str = "admin1234"
-
     # s3
     S3_ENDPOINT: str = "https://storage.yandexcloud.net"
     S3_REGION: str = "ru-central1"
@@ -36,8 +32,23 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = ""
     S3_SECRET_KEY: str = ""
 
+    # Пул соединений с БД. Потолок одновременно открытых коннектов на один
+    # процесс приложения — DB_POOL_SIZE + DB_MAX_OVERFLOW; при нескольких
+    # воркерах uvicorn это число умножается, а у провайдера (Supabase и т.п.)
+    # есть свой лимит — не задирайте вслепую.
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+    # Сколько ждать свободный коннект, прежде чем упасть с QueuePool timeout.
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
+
     # SSL для облачных БД (Supabase требует)
     DB_SSL: bool = True
+    # Проверка сертификата сервера БД. По умолчанию выключена (соединение
+    # шифруется, но сервер не аутентифицируется — защита от прослушивания,
+    # не от MITM). Включайте, когда у провайдера сертификат из системного CA
+    # или его CA добавлен в доверенные.
+    DB_SSL_VERIFY: bool = False
 
     # Firebase Cloud Messaging (push-уведомления)
     FCM_CREDENTIALS_JSON: str = ""
@@ -59,6 +70,17 @@ class Settings(BaseSettings):
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
             f"?prepared_statement_cache_size=0{ssl}"
         )
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+ALLOWED_MEDIA_TYPES = {
+    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo",
+    "audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4", "audio/wav",
+}
+
+# Общий потолок размера одного загружаемого файла (аватары, посты, альбомы).
+# Для сообщений чата действуют свои лимиты по типу — см. chats/service.py.
+MAX_FILE_SIZE = 25 * 1024 * 1024
 
 
 settings = Settings()
