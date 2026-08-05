@@ -1,0 +1,100 @@
+# Продакшен-конфигурация для VPS.
+#
+# Отличия от docker-compose.yaml (локальная разработка):
+#   - нет контейнера с Postgres: база живёт в Supabase;
+#   - образ приложения не собирается на сервере, а скачивается готовым
+#     (сборка Vite съедает ~1.5 ГБ RAM и на VPS с 2 ГБ падает с OOM);
+#   - Redis не публикует порт наружу — только во внутреннюю сеть Docker;
+#   - настоящий сертификат Let's Encrypt вместо самоподписанного.
+#
+# Запуск:  docker compose -f docker-compose.prod.yaml up -d
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/doorhanoff/dragram:latest}
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # Перебивают значения из .env: внутри сети Docker Redis доступен по имени
+      # сервиса, а не по localhost.
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 8000
+      # Перед приложением стоит ровно один прокси — nginx из этого же compose.
+      TRUSTED_PROXY_COUNT: 1
+    expose:
+      - "8000"
+    volumes:
+      # Локальные загрузки (StaticFiles в main.py). Основные файлы лежат в
+      # Yandex Object Storage, но каталог должен переживать пересоздание
+      # контейнера.
+      - media_data:/app/media
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    logging: &default_logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging: *default_logging
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?нужно задать DOMAIN в .env}
+      S3_BUCKET: ${S3_BUCKET:?нужно задать S3_BUCKET в .env}
+    volumes:
+      # Официальный образ nginx сам прогоняет *.template через envsubst
+      # и кладёт результат в /etc/nginx/conf.d/
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    # Раз в 6 часов перечитываем конфиг, чтобы подхватить обновлённый сертификат
+    command: >
+      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *default_logging
+
+  certbot:
+    image: certbot/certbot
+    restart: always
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Пробуем продлить сертификат каждые 12 часов. Let's Encrypt обновляет
+    # его только когда осталось меньше 30 дней, остальные запуски — no-op.
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;"
+    logging: *default_logging
+
+volumes:
+  redis_data:
+  media_data:
+  certbot_conf:
+  certbot_www:

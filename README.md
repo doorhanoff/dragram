@@ -229,18 +229,33 @@ All endpoints are prefixed with `/api` and documented at `/docs`.
 | `S3_BUCKET` | — | Bucket name |
 | `S3_ACCESS_KEY` | — | S3 access key |
 | `S3_SECRET_KEY` | — | S3 secret key |
+| `DOMAIN` | `""` | Production domain; added to the CORS allow-list |
+| `CORS_ORIGINS` | `""` | Extra allowed origins, comma-separated |
 
 ---
 
-## Deployment (Railway)
+## Deployment
 
-The repo is deploy-ready for [Railway](https://railway.app). Connect the repo, add a PostgreSQL and Redis service, set the environment variables above, and Railway will build via the `Dockerfile` and run `entrypoint.sh`.
+The primary target is a self-hosted VPS: nginx + the app container + Redis, with
+Postgres in Supabase and files in Yandex Object Storage. Step-by-step
+instructions are in **[DEPLOY.md](DEPLOY.md)**.
 
-Key things to set in Railway:
+Relevant files:
+
+- `docker-compose.prod.yaml` — production stack
+- `nginx/templates/default.conf.template` — nginx config with Let's Encrypt
+- `.github/workflows/build-image.yml` — image build (runs on GitHub, not on the server)
+- `deploy/` — server bootstrap, first certificate, deploy script
+
+### Railway / Render
+
+The repo also builds as-is on any Docker PaaS: it will use the `Dockerfile` and
+run `entrypoint.sh`. Things to set there:
 
 - `REDIS_HOST=redis.railway.internal` (internal network)
 - `REDIS_PORT=6379`
 - `DB_SSL=true` for the managed Postgres
+- `DOMAIN=<your domain>` so the domain lands in the CORS allow-list
 
 ---
 

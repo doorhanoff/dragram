@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     # Firebase Cloud Messaging (push-уведомления)
     FCM_CREDENTIALS_JSON: str = ""
 
+    # Боевой домен. Пусто при локальной разработке; на сервере задаётся в .env
+    # и попадает в список разрешённых CORS-origin'ов.
+    DOMAIN: str = ""
+    # Дополнительные origin'ы через запятую — на случай, если фронтенд
+    # обслуживается с другого адреса, чем DOMAIN.
+    CORS_ORIGINS: str = ""
+
     # Сколько доверенных прокси стоит перед приложением: балансировщик
     # Render/Railway = 1, локально nginx из docker-compose = 1.
     # Используется при разборе X-Forwarded-For — см. _client_ip в
@@ -61,6 +68,21 @@ class Settings(BaseSettings):
     TRUSTED_PROXY_COUNT: int = 1
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Локальная разработка, мобильное приложение и боевой домен."""
+        origins = [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "capacitor://localhost",
+            "https://localhost",
+            "http://localhost",
+        ]
+        if self.DOMAIN:
+            origins.append(f"https://{self.DOMAIN}")
+        origins.extend(o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip())
+        return origins
 
     @property
     def asyncpg_database_url(self) -> str:

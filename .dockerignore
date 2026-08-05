@@ -1,0 +1,49 @@
+# Git
+.git/
+.gitignore
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Секреты — попадают в контейнер через env_file, не через образ
+.env
+.env.*
+!.env.example
+
+# Фронтенд: node_modules ставится внутри образа, dist собирается там же
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production.local
+
+# Мобильное приложение (Android-проект Capacitor) бэкенду не нужно
+mobile/
+*.apk
+*.aab
+*.keystore
+
+# Локальные загрузки
+media/
+
+# IDE и мусор ОС
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Документация и деплой-обвязка (в образ не нужны)
+README.md
+DEPLOY.md
+docker-compose.yaml
+docker-compose.prod.yaml
+deploy/
+nginx/
+.github/
