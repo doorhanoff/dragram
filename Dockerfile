@@ -1,5 +1,5 @@
 # ── Шаг 1: сборка фронтенда ──────────────────────────────────────────────
-FROM node:20-slim AS frontend-builder
+FROM node:25-slim AS frontend-builder
 
 WORKDIR /frontend
 COPY frontend/package*.json ./
