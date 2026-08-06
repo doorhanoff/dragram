@@ -23,6 +23,18 @@ from ..auth.models import UsersOrm
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+# Штатное закрытие (клиент прислал close-фрейм) приходит как WebSocketDisconnect,
+# а неаккуратный обрыв — пропала мобильная сеть, заснул телефон, забился буфер —
+# прилетает из websockets как ConnectionClosedError мимо starlette. Ловим оба,
+# иначе TaskGroup печатает в лог полный traceback на каждый такой обрыв.
+DISCONNECT_ERRORS: tuple[type[BaseException], ...] = (WebSocketDisconnect,)
+try:
+    from websockets.exceptions import ConnectionClosed
+except ImportError:  # сервер поднят без websockets (например, на wsproto)
+    pass
+else:
+    DISCONNECT_ERRORS += (ConnectionClosed,)
+
 
 @router.post("/create", response_model=ChatsResponse,
              dependencies=[Depends(make_rate_limiter(max_requests=20, window=60))])
@@ -145,7 +157,7 @@ async def chat_websocket(
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(write_messages())
                 tg.create_task(broadcast_messages())
-        except* WebSocketDisconnect:
+        except* DISCONNECT_ERRORS:
             pass
 
 
