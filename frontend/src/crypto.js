@@ -110,6 +110,45 @@ export async function importPublicKey(base64) {
 // ── Safety Number (fingerprint для верификации out-of-band) ────────────────
 
 /**
+ * Публичный ключ текущего пользователя в base64 — для показа safety number.
+ */
+export async function myPublicKeyBase64(userId) {
+  const kp = await loadKeypair(userId)
+  return kp ? exportPublicKey(kp.publicKey) : null
+}
+
+function peerKeyName(myId, peerId) {
+  return `peerKey:${myId}:${peerId}`
+}
+
+/**
+ * Сверяет публичный ключ собеседника с последним известным.
+ *
+ * Ключи приходят с сервера, и клиент до сих пор доверял ответу безоговорочно:
+ * кто контролирует сервер или базу, мог подставить свой ключ и читать
+ * переписку (классический MITM). Полностью это лечится только сверкой
+ * safety number вживую, но запомненный локально ключ хотя бы делает подмену
+ * заметной — так же поступают Signal и WhatsApp.
+ *
+ * Возвращает 'new' (видим впервые — запомнили), 'same' или 'changed'.
+ */
+export async function checkPeerKey(myId, peerId, theirPublicKeyBase64) {
+  if (!myId || !peerId || !theirPublicKeyBase64) return 'new'
+  const name = peerKeyName(myId, peerId)
+  const known = await dbGet(name)
+  if (!known) {
+    await dbSet(name, theirPublicKeyBase64)
+    return 'new'
+  }
+  return known === theirPublicKeyBase64 ? 'same' : 'changed'
+}
+
+/** Пользователь подтвердил новый ключ собеседника — запоминаем его. */
+export async function trustPeerKey(myId, peerId, theirPublicKeyBase64) {
+  await dbSet(peerKeyName(myId, peerId), theirPublicKeyBase64)
+}
+
+/**
  * Вычисляет Safety Number — SHA-256 от отсортированных публичных ключей обоих участников.
  * Оба пользователя получат одинаковый номер → можно сверить лично.
  */
@@ -201,6 +240,28 @@ export async function exportRawKey(aesKey) {
 
 // ── Бэкап приватного ключа (PBKDF2 + AES-GCM) ────────────────────────────
 
+// Число итераций PBKDF2. OWASP с 2023 года рекомендует 600 000 для SHA-256;
+// раньше здесь стояло 250 000. Бэкап хранится на сервере, то есть при утечке
+// базы его подбирают офлайн — цена перебора должна быть максимальной.
+// На телефоне это ~0.5 секунды, и всего один раз при входе.
+const PBKDF2_ITERATIONS = 600_000
+// Старые бэкапы зашифрованы с прежним числом итераций: при расшифровке
+// пробуем и его, иначе люди просто потеряют доступ к своим ключам.
+const LEGACY_PBKDF2_ITERATIONS = 250_000
+
+async function deriveBackupKey(password, salt, iterations, usage) {
+  const baseKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password),
+    { name: 'PBKDF2' }, false, ['deriveKey']
+  )
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false, [usage]
+  )
+}
+
 /**
  * Шифрует JWK приватного ключа паролем.
  * Принимает jwk (объект или строку) — НЕ CryptoKey,
@@ -219,24 +280,18 @@ export async function encryptKeyBackup(privateKeyJwkOrKey, password) {
     jwkStr = JSON.stringify(jwk)
   }
 
-  const salt    = crypto.getRandomValues(new Uint8Array(16))
-  const iv      = crypto.getRandomValues(new Uint8Array(12))
-  const baseKey = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password),
-    { name: 'PBKDF2' }, false, ['deriveKey']
-  )
-  const aesKey  = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 250_000, hash: 'SHA-256' },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    false, ['encrypt']
-  )
+  const salt   = crypto.getRandomValues(new Uint8Array(16))
+  const iv     = crypto.getRandomValues(new Uint8Array(12))
+  const aesKey = await deriveBackupKey(password, salt, PBKDF2_ITERATIONS, 'encrypt')
   const ct = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     aesKey,
     new TextEncoder().encode(jwkStr)
   )
-  return btoa(JSON.stringify({ salt: b64enc(salt), iv: b64enc(iv), ct: b64enc(ct) }))
+  // it — число итераций: без него старый бэкап не отличить от нового.
+  return btoa(JSON.stringify({
+    salt: b64enc(salt), iv: b64enc(iv), ct: b64enc(ct), it: PBKDF2_ITERATIONS,
+  }))
 }
 
 /**
@@ -244,20 +299,26 @@ export async function encryptKeyBackup(privateKeyJwkOrKey, password) {
  * Возвращает { privateKey, publicKey } — приватный ключ NON-EXTRACTABLE.
  */
 export async function decryptKeyBackup(backupBase64, password) {
-  const { salt, iv, ct } = JSON.parse(atob(backupBase64))
-  const baseKey = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password),
-    { name: 'PBKDF2' }, false, ['deriveKey']
-  )
-  const aesKey  = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: b64dec(salt), iterations: 250_000, hash: 'SHA-256' },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    false, ['decrypt']
-  )
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: b64dec(iv) }, aesKey, b64dec(ct)
-  )
+  const { salt, iv, ct, it } = JSON.parse(atob(backupBase64))
+  // Бэкапы без поля it сделаны до перехода на 600 000 итераций: пробуем
+  // сначала заявленное значение, потом старое.
+  const candidates = it ? [it] : [PBKDF2_ITERATIONS, LEGACY_PBKDF2_ITERATIONS]
+
+  let decrypted = null
+  let lastError = null
+  for (const iterations of candidates) {
+    const aesKey = await deriveBackupKey(password, b64dec(salt), iterations, 'decrypt')
+    try {
+      decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: b64dec(iv) }, aesKey, b64dec(ct)
+      )
+      break
+    } catch (e) {
+      lastError = e
+    }
+  }
+  if (!decrypted) throw lastError
+
   const jwk = JSON.parse(new TextDecoder().decode(decrypted))
 
   // Импортируем как NON-EXTRACTABLE

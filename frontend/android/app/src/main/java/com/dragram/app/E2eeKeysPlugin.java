@@ -3,10 +3,13 @@ package com.dragram.app;
 import android.app.NotificationManager;
 import android.content.Context;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.util.Iterator;
 
 /**
  * Мост между WebView и нативным хранилищем ключей.
@@ -30,9 +33,32 @@ public class E2eeKeysPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Обновляет локальный справочник имён (id → имя). Сервер шлёт в push
+     * только идентификаторы, имена подставляются из него уже на устройстве.
+     */
+    @PluginMethod
+    public void syncNames(PluginCall call) {
+        JSObject names = call.getObject("names");
+        if (names == null) {
+            call.reject("names is required");
+            return;
+        }
+        Iterator<String> ids = names.keys();
+        while (ids.hasNext()) {
+            String id = ids.next();
+            String name = names.getString(id);
+            if (name != null && !name.isEmpty()) {
+                NameStore.put(getContext(), id, name);
+            }
+        }
+        call.resolve();
+    }
+
     @PluginMethod
     public void clearKeys(PluginCall call) {
         ChatKeyStore.clear(getContext());
+        NameStore.clear(getContext());
         DragramMessagingService.forgetHistory();
         call.resolve();
     }

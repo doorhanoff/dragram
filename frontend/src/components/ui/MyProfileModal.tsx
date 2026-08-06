@@ -10,9 +10,11 @@ interface Props {
   userId: string
   onClose: () => void
   onLogout: () => void
+  /** Смена ключевой пары E2EE — сама операция живёт в App, где хранятся ключи. */
+  onRotateKeys: (password: string) => Promise<void>
 }
 
-export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
+export default function MyProfileModal({ userId, onClose, onLogout, onRotateKeys }: Props) {
   const [user,    setUser]    = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -21,6 +23,15 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
   const [saving, setSaving] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [showAppearance, setShowAppearance] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  const [rotatePassword, setRotatePassword] = useState('')
+  const [rotateError, setRotateError] = useState('')
+  const [rotateBusy, setRotateBusy] = useState(false)
+  const [rotateDone, setRotateDone] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const { palette } = useTheme()
   const paletteLabel = { hearth: 'Очаг', forest: 'Лес', sky: 'Небо' }[palette]
@@ -28,8 +39,41 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
   useBackHandler(onClose)
 
   useEffect(() => {
-    api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))
+    // Свой профиль берём через /auth/me: телефон отдаётся только там —
+    // в чужих профилях его больше нет.
+    api.getMe().then(setUser).catch(() => {}).finally(() => setLoading(false))
   }, [userId])
+
+  async function confirmDelete() {
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await api.deleteAccount(deletePassword)
+      onLogout()
+    } catch (err: any) {
+      setDeleteError(err.message === '401' || err.message === 'Invalid credentials'
+        ? 'Неверный пароль'
+        : 'Не получилось удалить: ' + err.message)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  async function confirmRotate() {
+    setRotateBusy(true)
+    setRotateError('')
+    try {
+      await onRotateKeys(rotatePassword)
+      setRotateDone(true)
+      setRotatePassword('')
+    } catch (err: any) {
+      setRotateError(err.message === '401' || err.message === 'Invalid credentials'
+        ? 'Неверный пароль'
+        : 'Не получилось сменить ключ: ' + err.message)
+    } finally {
+      setRotateBusy(false)
+    }
+  }
 
   function startEdit() {
     setName(user?.name || '')
@@ -198,13 +242,25 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
               </div>
 
               {/* Logout */}
-              <div className="p-4 pb-safe">
+              <div className="p-4 pb-safe flex flex-col gap-2">
                 <button
                   onClick={onLogout}
                   className="w-full flex items-center justify-center gap-2 bg-bg text-red-500 rounded-2xl py-2.5 text-sm font-bold hover:bg-border transition-colors"
                 >
                   <IconLogout size={16} stroke={1.5} />
                   Выйти из аккаунта
+                </button>
+                <button
+                  onClick={() => setRotating(true)}
+                  className="w-full text-center text-xs text-muted py-1 hover:text-accent transition-colors"
+                >
+                  Сменить ключ шифрования
+                </button>
+                <button
+                  onClick={() => setDeleting(true)}
+                  className="w-full text-center text-xs text-muted py-1 hover:text-red-500 transition-colors"
+                >
+                  Удалить аккаунт
                 </button>
               </div>
             </>
@@ -213,6 +269,103 @@ export default function MyProfileModal({ userId, onClose, onLogout }: Props) {
       </div>
 
       {showAppearance && <AppearanceModal onClose={() => setShowAppearance(false)} />}
+
+      {/* Смена ключа E2EE: последствия необратимы, поэтому объясняем их
+          заранее и подтверждаем паролем */}
+      {rotating && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+          onClick={e => e.target === e.currentTarget && !rotateBusy && setRotating(false)}>
+          <div className="bg-surface rounded-card w-full max-w-xs p-5 shadow-xl">
+            {rotateDone ? (
+              <>
+                <div className="text-lg font-extrabold text-primary mb-1">Ключ сменён</div>
+                <p className="text-xs text-muted mb-3">
+                  Собеседники увидят пометку «ключ изменился» — это нормально, но
+                  стоит сверить с ними новый код безопасности в профиле.
+                  В групповых чатах переписка появится, когда кто-нибудь из
+                  участников откроет чат.
+                </p>
+                <button
+                  onClick={() => { setRotating(false); setRotateDone(false) }}
+                  className="w-full bg-accent text-onAccent rounded-xl py-2.5 text-sm font-bold"
+                >
+                  Понятно
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-extrabold text-primary mb-1">Сменить ключ шифрования?</div>
+                <p className="text-xs text-muted mb-3">
+                  Нужно, если ключ мог попасть в чужие руки. Вся переписка,
+                  зашифрованная прежним ключом, <b>перестанет открываться</b> —
+                  и у вас, и у собеседников. Отменить это будет нельзя.
+                </p>
+                <input
+                  type="password"
+                  value={rotatePassword}
+                  onChange={e => setRotatePassword(e.target.value)}
+                  placeholder="Введите пароль"
+                  className="w-full h-11 bg-bg border border-border rounded-xl px-3 text-md text-primary outline-none mb-3"
+                />
+                {rotateError && <p className="text-xs font-bold text-red-500 mb-2">{rotateError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setRotating(false); setRotatePassword(''); setRotateError('') }}
+                    disabled={rotateBusy}
+                    className="flex-1 bg-bg text-primary rounded-xl py-2.5 text-sm font-bold hover:bg-border transition-colors disabled:opacity-50"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={confirmRotate}
+                    disabled={rotateBusy || rotatePassword.length < 8}
+                    className="flex-1 bg-accent text-onAccent rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+                  >
+                    {rotateBusy ? 'Меняю…' : 'Сменить'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Удаление аккаунта: необратимо, поэтому подтверждается паролем */}
+      {deleting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+          onClick={e => e.target === e.currentTarget && setDeleting(false)}>
+          <div className="bg-surface rounded-card w-full max-w-xs p-5 shadow-xl">
+            <div className="text-lg font-extrabold text-primary mb-1">Удалить аккаунт?</div>
+            <p className="text-xs text-muted mb-3">
+              Будут удалены ваш профиль, сообщения, посты, комментарии, альбомы и
+              загруженные файлы. Восстановить их будет нельзя.
+            </p>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              placeholder="Введите пароль"
+              className="w-full h-11 bg-bg border border-border rounded-xl px-3 text-md text-primary outline-none mb-3"
+            />
+            {deleteError && <p className="text-xs font-bold text-red-500 mb-2">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setDeleting(false); setDeletePassword(''); setDeleteError('') }}
+                className="flex-1 bg-bg text-primary rounded-xl py-2.5 text-sm font-bold hover:bg-border transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleteBusy || deletePassword.length < 8}
+                className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+              >
+                {deleteBusy ? 'Удаляю…' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

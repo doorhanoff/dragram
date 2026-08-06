@@ -27,7 +27,7 @@ async def get_token_payload(
     request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> TokenData:
-    token = _extract_token(request)
+    token = extract_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -49,7 +49,7 @@ async def get_optional_token_payload(
     """Опциональная аутентификация: для эндпоинтов, доступных и без входа,
     но персонализирующих ответ для вошедших. Любая проблема с токеном —
     просто аноним, без 401."""
-    token = _extract_token(request)
+    token = extract_token(request)
     if not token:
         return None
     try:
@@ -58,7 +58,7 @@ async def get_optional_token_payload(
         return None
 
 
-def _extract_token(request: Request) -> str | None:
+def extract_token(request: Request) -> str | None:
     """Принимает токен из куки (веб) или Authorization: Bearer (мобильное)."""
     token = request.cookies.get("token")
     if not token:
@@ -72,7 +72,7 @@ async def get_current_user(
     request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> UsersOrm:
-    token = _extract_token(request)
+    token = extract_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -100,14 +100,19 @@ async def ws_get_current_user(
     само соединение, и коннект из пула был бы занят всё время, пока открыт чат.
     Пользователь загружается вместе с чатами и участниками (selectinload), так
     что после закрытия сессии объект остаётся пригодным для чтения.
+
+    Токен в query-строку больше не принимаем: браузерный WebSocket не умеет
+    задавать Authorization, а `?token=<JWT>` оседает в access-логах nginx и
+    любого прокси по пути. Вместо него — одноразовый тикет (`POST
+    /chats/ws-ticket`), который гасится при первом же использовании.
     """
-    token = websocket.cookies.get("token") or websocket.query_params.get("token")
-    if not token:
-        raise WebSocketException(code=4001, reason="Not authenticated")
     try:
         async with async_session() as session:
             service = AuthService(AuthRepository(session), jwt_manager, redis)
-            user = await service.get_user_data_by_token(token)
+            user = await service.authenticate_websocket(
+                token=websocket.cookies.get("token"),
+                ticket=websocket.query_params.get("ticket"),
+            )
         if not user:
             raise WebSocketException(code=4001, reason="User not found")
         return user

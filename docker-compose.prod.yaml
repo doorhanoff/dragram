@@ -27,20 +27,25 @@ services:
       PORT: 8000
       # Перед приложением стоит ровно один прокси — nginx из этого же compose.
       TRUSTED_PROXY_COUNT: 1
+      # X-Forwarded-* принимаем только из своей сети Docker (подсеть задана
+      # ниже, в networks): заголовкам с любого другого адреса верить нельзя.
+      FORWARDED_ALLOW_IPS: 172.28.0.0/16
     expose:
       - "8000"
-    volumes:
-      # Локальные загрузки (StaticFiles в main.py). Основные файлы лежат в
-      # Yandex Object Storage, но каталог должен переживать пересоздание
-      # контейнера.
-      - media_data:/app/media
+    # Ограничения на случай выполнения чужого кода внутри контейнера:
+    # никаких дополнительных прав и никакого повышения привилегий.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
+      # /healthz, а не /docs: документация в проде выключена.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -72,14 +77,25 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    # requirepass: единственным барьером до сих пор была изоляция сети Docker —
+    # любая SSRF в приложении давала полный доступ к состоянию токенов.
+    #
+    # allkeys-lru вместо noeviction: при заполнении памяти запись в Redis
+    # начинала падать, а вместе с ней отключались лимитер и отзыв токенов.
+    # Все ключи здесь с TTL и восстановимы, вытеснение безопаснее отказа.
+    command: >
+      redis-server --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?нужно задать REDIS_PASSWORD в .env}
+      --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?нужно задать REDIS_PASSWORD в .env}
     logging: *default_logging
 
   nginx:
@@ -89,8 +105,9 @@ services:
       - "80:80"
       - "443:443"
     environment:
+      # S3_BUCKET здесь больше не нужен: медиа проксируется в приложение,
+      # а не в хранилище напрямую.
       DOMAIN: ${DOMAIN:?нужно задать DOMAIN в .env}
-      S3_BUCKET: ${S3_BUCKET:?нужно задать S3_BUCKET в .env}
     volumes:
       # Официальный образ nginx сам прогоняет *.template через envsubst
       # и кладёт результат в /etc/nginx/conf.d/
@@ -128,6 +145,13 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  media_data:
   certbot_conf:
   certbot_www:
+
+# Подсеть задана явно, чтобы приложение могло доверять X-Forwarded-* именно
+# из неё (FORWARDED_ALLOW_IPS выше), а не «всем подряд».
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

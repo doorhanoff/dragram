@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: что можно вынести из приложения при облачном бэкапе и при
+     переносе на новый телефон.
+
+     Не выносим ничего. В данных приложения лежат localStorage с JWT и
+     IndexedDB с приватным ключом E2EE — для мессенджера с шифрованием их
+     утечка в чужой Google Drive равносильна утечке всей переписки.
+     Ключ восстанавливается своим паролем через key-backup, отдельный
+     механизм переноса ему не нужен. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

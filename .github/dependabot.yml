@@ -1,0 +1,38 @@
+# Обновления зависимостей приходят сами: следить за CVE вручную в проекте
+# на одного человека всё равно не выйдет.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Патч- и минорные обновления одной пачкой, чтобы не разгребать
+      # десяток PR в неделю. Мажорные приходят отдельно — их надо смотреть.
+      python-minor:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "gradle"
+    directory: "/frontend/android"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

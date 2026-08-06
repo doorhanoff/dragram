@@ -28,6 +28,13 @@ COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 RUN chmod +x entrypoint.sh
 
+# Приложение работает не от root: любое выполнение кода внутри контейнера
+# (RCE, кривая зависимость) иначе сразу получало бы полные права.
+# uv кладёт виртуальное окружение в /app/.venv — владельца меняем после
+# копирования, чтобы права достались и ему.
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 
 CMD ["sh", "entrypoint.sh"]

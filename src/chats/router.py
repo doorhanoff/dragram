@@ -2,7 +2,10 @@ import uuid
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends, UploadFile, HTTPException, status, File, WebSocket, WebSocketDisconnect, WebSocketException
+from fastapi import (
+    APIRouter, Depends, UploadFile, HTTPException, Query, status, File,
+    WebSocket, WebSocketDisconnect, WebSocketException,
+)
 from redis.asyncio import Redis
 
 from .depends import (
@@ -74,7 +77,9 @@ async def get_chat_by_id(chat: ChatsOrm = Depends(get_chat)):
 @router.get("/{chat_id}/messages", response_model=list[MessagesResponse])
 async def get_chat_messages(
     chat_id: uuid.UUID,
-    limit: int = 50,
+    # Верхняя граница обязательна: ?limit=1000000 иначе поднимает всю историю
+    # чата в память приложения и Postgres разом.
+    limit: int = Query(50, ge=1, le=100),
     before_id: uuid.UUID | None = None,
     _: ChatsOrm = Depends(get_chat),
     service: ChatsService = Depends(get_chats_service),
@@ -115,6 +120,18 @@ async def set_chat_keys(
 
 
 
+@router.get("/{chat_id}/keys/missing", response_model=list[uuid.UUID])
+async def get_members_without_keys(
+    chat_id: uuid.UUID,
+    user: UsersOrm = Depends(get_current_user),
+    service: ChatsService = Depends(get_chats_service),
+):
+    """Кому из участников ещё не выдан ключ чата. Клиент, у которого ключ есть,
+    зашифрует его их публичными ключами и выложит через /keys — так участник,
+    сменивший ключевую пару, снова получает доступ к групповому чату."""
+    return await service.get_members_without_keys(chat_id, user)
+
+
 @router.get("/{chat_id}/keys/me")
 async def get_my_chat_key(
     chat_id: uuid.UUID,
@@ -144,11 +161,26 @@ async def chat_websocket(
 
     async with make_service.pubsub(chat_id) as conn:
         async def write_messages():
-            async for raw in ws.iter_json():
+            # iter_text, а не iter_json: невалидный JSON иначе поднимает
+            # исключение прямо из итератора и рвёт соединение — клиент,
+            # приславший мусор, ронял себе чат вместо получения ошибки.
+            async for raw in ws.iter_text():
+                try:
+                    event = json.loads(raw)
+                except ValueError:
+                    await ws.send_json({"event": "error", "detail": "Malformed JSON"})
+                    continue
                 # Сессия БД берётся из пула на время обработки одного события
                 # и сразу возвращается: открытый чат не должен занимать коннект.
                 async with make_service() as service:
-                    await service.handle_incoming_event(raw, chat, user)
+                    try:
+                        await service.handle_incoming_event(event, chat, user)
+                    except HTTPException as exc:
+                        await ws.send_json({
+                            "event": "error",
+                            "status": exc.status_code,
+                            "detail": exc.detail,
+                        })
         async def broadcast_messages():
             async for message in conn.listen():
                 await ws.send_json(message)

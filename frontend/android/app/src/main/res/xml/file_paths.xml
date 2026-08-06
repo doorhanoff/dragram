@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Что FileProvider вправе отдавать другим приложениям.
+
+     Было <external-path name="my_images" path="." /> — то есть корень
+     внешнего хранилища целиком: по такому URI можно было выдать наружу
+     любой файл на «карте памяти», а не только снятое приложением фото.
+     Сужено до собственных каталогов приложения (Capacitor Camera кладёт
+     снимки в кеш и в свою внешнюю папку). -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
+    <external-files-path name="my_images" path="Pictures" />
     <cache-path name="my_cache_images" path="." />
+    <external-cache-path name="my_external_cache_images" path="." />
 </paths>

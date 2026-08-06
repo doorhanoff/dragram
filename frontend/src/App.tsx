@@ -3,9 +3,9 @@ import { api } from './api'
 import {
   generateKeypairFull, storeKeypair, loadKeypair, exportPublicKey,
   deriveSharedKey, generateGroupKey, encryptGroupKey, decryptGroupKey,
-  encryptMessage, decryptMessage, encryptKeyBackup, decryptKeyBackup,
+  encryptMessage, decryptMessage, encryptKeyBackup, decryptKeyBackup, checkPeerKey,
 } from './crypto'
-import { syncChatKey, clearNativeKeys, clearChatNotifications } from './nativeKeys'
+import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 
 import Auth              from './components/Auth'
 import Sidebar           from './components/layout/Sidebar'
@@ -34,10 +34,40 @@ async function resolveChatKey(chat: Chat, myId: string, kp: any) {
     const other = members.find(m => String(m.id) !== String(myId))
     if (!other) return null
     const { public_key } = await api.getUserPublicKey(other.id)
+    // Запоминаем ключ собеседника при первой встрече: смену потом видно
+    // в его профиле (там же сверяется номер безопасности).
+    if (await checkPeerKey(myId, other.id, public_key) === 'changed') {
+      console.warn('Публичный ключ собеседника изменился:', other.id)
+    }
     return deriveSharedKey(kp.privateKey, public_key)
   } else {
     const { encrypted_key } = await api.getMyChatKey(chat.id)
     return decryptGroupKey(encrypted_key, kp.privateKey)
+  }
+}
+
+/**
+ * Выдаёт ключ группового чата тем участникам, у кого его ещё нет.
+ *
+ * Сервер хранит ключ чата зашифрованным под каждого участника отдельно и сам
+ * расшифровать его не может — значит, и выдать новому получателю тоже. Это
+ * делает любой клиент, у которого ключ уже есть. Нужно после смены ключевой
+ * пары: старые строки при смене удаляются, иначе человек остался бы в группе
+ * без доступа к переписке навсегда.
+ */
+async function shareGroupKeyWithNewcomers(chatId: string, K: any) {
+  try {
+    const missing: string[] = await api.getMembersWithoutKeys(chatId)
+    if (!missing?.length) return
+    const keys = (await Promise.all(missing.map(async uid => {
+      try {
+        const { public_key } = await api.getUserPublicKey(uid)
+        return { user_id: uid, encrypted_key: await encryptGroupKey(K, public_key) }
+      } catch { return null }   // у человека ещё нет своего ключа — не наша беда
+    }))).filter(Boolean)
+    if (keys.length) await api.setChatKeys(chatId, keys)
+  } catch {
+    // Не критично: попробуем в следующий раз при открытии чата.
   }
 }
 
@@ -174,6 +204,37 @@ export default function App() {
     return kp
   }
 
+  /**
+   * Смена ключевой пары E2EE — если прежний ключ скомпрометирован или забыт
+   * пароль от бэкапа. Раньше ключ записывался на сервере ровно один раз, и
+   * сменить его можно было только правкой базы.
+   *
+   * Цена операции: переписка, зашифрованная старым ключом, не расшифруется
+   * ни у вас, ни у собеседников. Личные чаты продолжат работать сразу (общий
+   * ключ выводится из ключей обеих сторон), групповые — когда любой участник
+   * откроет чат и выдаст вам ключ заново.
+   */
+  const rotateKeys = useCallback(async (password: string) => {
+    const userId = userIdRef.current
+    if (!userId) throw new Error('Не загружен профиль')
+
+    const { privateKey, publicKey, jwk } = await generateKeypairFull()
+    const pub = await exportPublicKey(publicKey)
+    const backup = await encryptKeyBackup(jwk, password)
+
+    // Сначала сервер: если он откажет (неверный пароль), локальные ключи
+    // должны остаться прежними, иначе доступ к переписке потеряется зря.
+    await api.rotateKeys(password, pub, backup)
+
+    await storeKeypair(userId, { privateKey, publicKey })
+    keyPairRef.current = { privateKey, publicKey }
+    myPubKeyRef.current = pub
+    chatKeysRef.current.clear()
+    loadedChats.current.clear()
+    clearNativeKeys()
+    setMessages({})
+  }, [])
+
   async function setupCrypto(userId: string, password: string | null, isNewAccount = false) {
     try {
       if (isNewAccount) {
@@ -226,6 +287,9 @@ export default function App() {
   useEffect(() => {
     api.getMe()
       .then(async (u: User) => {
+        // Тикет на медиа берём до первой отрисовки: без него ссылки на
+        // картинки не подписаны, и хранилище их не отдаст.
+        await api.ensureMediaTicket().catch(() => {})
         setUser(u); userIdRef.current = u.id
         await setupCrypto(u.id, null)
         loadChats()
@@ -234,8 +298,30 @@ export default function App() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Тикет живёт час — обновляем его, пока приложение открыто.
+  useEffect(() => {
+    if (!user) return
+    const id = setInterval(() => { api.ensureMediaTicket().catch(() => {}) }, 10 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [user])
+
   const loadChats = useCallback(async () => {
-    try { setChats(await api.getChats() || []) } catch {}
+    try {
+      const list: Chat[] = await api.getChats() || []
+      setChats(list)
+      // Справочник имён для push-уведомлений: сервер шлёт только id, имя
+      // подставляет само устройство (см. nativeKeys.syncNames).
+      const names: Record<string, string> = {}
+      for (const chat of list) {
+        const members = chat.members || []
+        for (const m of members) names[m.id] = m.name
+        // Для личного чата «название» — имя собеседника.
+        const other = members.find(m => String(m.id) !== String(userIdRef.current))
+        const title = chat.name || (members.length <= 2 ? other?.name : null)
+        if (title) names[chat.id] = title
+      }
+      syncNames(names)
+    } catch {}
   }, [])
 
   // Периодически обновляем список чатов, чтобы счётчики непрочитанных были актуальны
@@ -286,7 +372,7 @@ export default function App() {
   }, [activeTab, albums.length, loadAlbums])
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
-  const connectWS = useCallback((chatId: string, attempt = 0) => {
+  const connectWS = useCallback(async (chatId: string, attempt = 0) => {
     wsRef.current?.close()
     // Если задан VITE_WS_URL — используем его (нужно для Capacitor/мобильного)
     // Иначе определяем по текущему хосту
@@ -296,8 +382,25 @@ export default function App() {
       const host  = import.meta.env.DEV ? 'localhost:8000' : location.host
       wsBase = `${proto}://${host}`
     }
-    const token = api.getAccessToken()
-    const wsUrl = `${wsBase.replace(/\/$/, '')}/chats/ws/${chatId}${token ? `?token=${token}` : ''}`
+
+    // Одноразовый тикет вместо токена в адресе: query-строка попадает в
+    // access-логи nginx, и JWT оттуда можно было бы просто взять и
+    // использовать. Тикет живёт 30 секунд и гасится при подключении.
+    let ticket: string | null = null
+    try {
+      ticket = (await api.getWsTicket()).ticket
+    } catch {
+      // Не смогли получить пропуск (нет сети, протух токен) — пробуем позже
+      // тем же backoff'ом, что и при обрыве соединения.
+      if (activeChatRef.current !== chatId) return
+      const delay = Math.min(3000 * 2 ** attempt, 30000) + Math.random() * 1000
+      wsRetryTimer.current = setTimeout(() => connectWS(chatId, attempt + 1), delay)
+      return
+    }
+    // Пока ходили за тикетом, пользователь мог уйти в другой чат.
+    if (activeChatRef.current !== chatId) return
+
+    const wsUrl = `${wsBase.replace(/\/$/, '')}/chats/ws/${chatId}?ticket=${encodeURIComponent(ticket)}`
     const ws = new WebSocket(wsUrl)
     let didConnect = false
 
@@ -313,6 +416,12 @@ export default function App() {
       }
       if (data.event === 'delete') {
         setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).filter(m => m.id !== data.message_id) }))
+        return
+      }
+      if (data.event === 'error') {
+        // Сервер отвечает ошибкой вместо разрыва соединения — например,
+        // когда сработал лимит на частоту сообщений.
+        console.warn('Сервер отклонил событие:', data.status, data.detail)
         return
       }
 
@@ -380,6 +489,15 @@ export default function App() {
           syncChatKey(chatId, key)
         }
       }
+    }
+
+    // Кому-то из группы ключ ещё не выдан — например, человек сменил ключевую
+    // пару, и его строка была удалена. Раздать ключ может только клиент:
+    // у сервера его нет и быть не должно.
+    const groupKey = chatKeysRef.current.get(chatId)
+    const groupChat = chatObj || chatsRef.current.find(c => c.id === chatId)
+    if (groupKey && groupChat && (groupChat.members?.length || 0) > 2) {
+      shareGroupKeyWithNewcomers(chatId, groupKey)
     }
 
     if (!loadedChats.current.has(chatId)) {
@@ -468,6 +586,7 @@ export default function App() {
   }, [])
 
   const handleLogin = useCallback(async (u: User, password: string, isNewAccount = false) => {
+    await api.ensureMediaTicket(true).catch(() => {})
     setUser(u); userIdRef.current = u.id
     await setupCrypto(u.id, password, isNewAccount)
     loadChats()
@@ -579,7 +698,12 @@ export default function App() {
       )}
 
       {showMyProfile && user && (
-        <MyProfileModal userId={user.id} onClose={() => setShowMyProfile(false)} onLogout={() => { setShowMyProfile(false); logout() }} />
+        <MyProfileModal
+          userId={user.id}
+          onClose={() => setShowMyProfile(false)}
+          onLogout={() => { setShowMyProfile(false); logout() }}
+          onRotateKeys={rotateKeys}
+        />
       )}
 
     </div>

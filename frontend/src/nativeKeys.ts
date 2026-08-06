@@ -12,6 +12,7 @@ import { exportRawKey } from './crypto'
  */
 interface E2eeKeysPlugin {
   syncChatKey(options: { chatId: string; key: string }): Promise<void>
+  syncNames(options: { names: Record<string, string> }): Promise<void>
   clearKeys(): Promise<void>
   clearChatNotifications(options: { chatId: string }): Promise<void>
 }
@@ -28,6 +29,21 @@ export async function syncChatKey(chatId: string, aesKey: CryptoKey | null): Pro
     await E2eeKeys.syncChatKey({ chatId, key: await exportRawKey(aesKey) })
   } catch (e) {
     console.warn('Failed to sync chat key to native store', e)
+  }
+}
+
+/**
+ * Отдаёт нативному коду справочник имён (id чата или пользователя → имя).
+ *
+ * Сервер шлёт в push только идентификаторы — имя отправителя и название чата
+ * не должны быть видны FCM. Уведомление подставляет имя отсюда.
+ */
+export async function syncNames(names: Record<string, string>): Promise<void> {
+  if (!isNative() || !Object.keys(names).length) return
+  try {
+    await E2eeKeys.syncNames({ names })
+  } catch (e) {
+    console.warn('Failed to sync names to native store', e)
   }
 }
 

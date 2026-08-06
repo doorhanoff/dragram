@@ -4,7 +4,7 @@ import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import type { Post } from '../../types'
-import { api } from '../../api'
+import { api, mediaSrc } from '../../api'
 
 function fmtAgo(dt: string): string {
   const diff = Date.now() - new Date(dt).getTime()
@@ -74,14 +74,14 @@ export default function PostCard({ post, onClick }: Props) {
                 className="w-full h-full focus:outline-none flex items-center justify-center"
                 onClick={e => { e.stopPropagation(); setLightbox(0) }}
               >
-                <img src={coverImg} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
+                <img src={mediaSrc(coverImg)} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
               </button>
             ) : (
               <button
                 className="w-full h-full focus:outline-none relative flex items-center justify-center"
                 onClick={e => { e.stopPropagation(); setVideoOpen(true) }}
               >
-                <video src={coverVid} className="max-w-full max-h-full object-contain" preload="metadata" muted playsInline />
+                <video src={mediaSrc(coverVid)} className="max-w-full max-h-full object-contain" preload="metadata" muted playsInline />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors">
                   <div className="w-11 h-11 rounded-full bg-white/90 flex items-center justify-center">
                     <IconPlayerPlayFilled size={18} className="text-primary ml-0.5" />
@@ -136,13 +136,13 @@ export default function PostCard({ post, onClick }: Props) {
       {/* Лайтбокс — открывается внутри сайта, не на S3 */}
       {lightbox !== null && images.length > 0 && (
         <ImageLightbox
-          images={images}
+          images={images.map(mediaSrc)}
           startIndex={lightbox}
           onClose={() => setLightbox(null)}
         />
       )}
       {videoOpen && coverVid && (
-        <VideoLightbox src={coverVid} onClose={() => setVideoOpen(false)} />
+        <VideoLightbox src={mediaSrc(coverVid)} onClose={() => setVideoOpen(false)} />
       )}
     </>
   )

@@ -4,9 +4,13 @@ import uuid
 from typing import Literal
 
 from fastapi import UploadFile
+from pydantic import ValidationError
 from redis.asyncio import Redis
 
-from .exceptions import ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember, TooLargeSize
+from .exceptions import (
+    ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember, TooLargeSize,
+    ForeignMediaUrl, InvalidEvent, TooManyMessages, UnknownMember,
+)
 from .repo import ChatsRepository
 from .schemas import (
     CreateChat, CreateChatDb, MessageDbSchema, ChatKeyItem, ForwardMessage,
@@ -17,6 +21,8 @@ from ..auth.models import UsersOrm
 from ..s3.service import S3Service
 from ..notifications.service import NotificationsService
 from src.config import ALLOWED_MEDIA_TYPES, ALLOWED_IMAGE_TYPES
+from src.core.quota import UploadQuota
+from src.core.rate_limit import hit_counter
 
 
 NOTIFICATION_BODY_BY_TYPE = {
@@ -31,9 +37,18 @@ DEFAULT_NOTIFICATION_BODY = NOTIFICATION_BODY_BY_TYPE["text"]
 # сообщения туда не влезет — такое уведомление придёт с общей подписью.
 MAX_PUSH_CIPHERTEXT = 2500
 
-MAX_IMAGE_SIZE = 1024 * 1024 * 50
-MAX_VIDEO_SIZE = 1024 * 1024 * 3000
-MAX_AUDIO_SIZE = 1024 * 1024 * 300
+# Потолки на один файл. Раньше здесь стояло 3 ГБ для видео — число, которое
+# ничего не ограничивало: реальным пределом был client_max_body_size в nginx,
+# а диск VPS меньше нескольких таких файлов. Значения согласованы с nginx.
+MAX_IMAGE_SIZE = 1024 * 1024 * 25
+MAX_VIDEO_SIZE = 1024 * 1024 * 200
+MAX_AUDIO_SIZE = 1024 * 1024 * 50
+
+# Сообщений в websocket на пользователя. Каждое — это запись в БД, публикация
+# в Redis и push всем офлайн-участникам, поэтому лимит на соединения
+# (он считает только попытки подключиться) ничего здесь не защищал.
+MAX_WS_MESSAGES = 30
+WS_MESSAGE_WINDOW = 10
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +61,21 @@ class ChatsService:
         redis: Redis,
         notifications: NotificationsService,
         redis_pubsub: Redis,
+        quota: UploadQuota,
     ):
         self.repo = repo
         self.s3 = s3
         self.redis = redis
         self.notifications = notifications
         self.redis_pubsub = redis_pubsub
+        self.quota = quota
 
     async def create(self, data: CreateChat, user: UsersOrm) -> ChatsOrm:
         members = list({user.id, *data.members})
+        # Проверяем участников до вставки: несуществующий UUID иначе доходил
+        # до нарушения внешнего ключа и превращался в 500.
+        if not await self.repo.all_users_exist(members):
+            raise UnknownMember()
         existing_chat = await self.repo.get_by_members(members)
         if existing_chat:
             return existing_chat
@@ -123,6 +144,10 @@ class ChatsService:
         await self.repo.set_chat_keys(chat_id, keys)
         await self.repo.commit()
 
+    async def get_members_without_keys(self, chat_id: uuid.UUID, user: UsersOrm) -> list[uuid.UUID]:
+        await self._get_chat_for_member(chat_id, user)
+        return await self.repo.members_without_keys(chat_id)
+
     async def get_my_chat_key(self, chat_id: uuid.UUID, user: UsersOrm):
         await self._get_chat_for_member(chat_id, user)
         return await self.repo.get_my_chat_key(chat_id, user.id)
@@ -169,6 +194,7 @@ class ChatsService:
             msg_type, max_size = "image", MAX_IMAGE_SIZE
         if file.size and file.size > max_size:
             raise TooLargeSize()
+        await self.quota.consume(user.id, file.size or 0)
 
         url = await self.s3.upload_file(file.file, file.content_type)
 
@@ -182,6 +208,12 @@ class ChatsService:
         return await self.send_message(user, chat, text=url, type=msg_type, thumbnail_url=thumbnail_url)
 
     async def forward_message(self, user: UsersOrm, data: ForwardMessage, chat: ChatsOrm) -> MessageEvent:
+        # Пересылается ссылка на файл, а не сам файл, поэтому она обязана вести
+        # в наше хранилище. Иначе в чат пересылается «картинка» с адресом
+        # злоумышленника, и клиенты участников сами её загружают.
+        for url in (data.text, data.thumbnail_url):
+            if url and self.s3.key_from_url(url) is None:
+                raise ForeignMediaUrl()
         return await self.send_message(
             user, chat, text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
         )
@@ -197,22 +229,28 @@ class ChatsService:
         # body — запасная подпись: её покажут, если расшифровать не выйдет
         # (нет ключа чата, старая версия клиента, не-Android платформа).
         body = NOTIFICATION_BODY_BY_TYPE.get(event.type, DEFAULT_NOTIFICATION_BODY)
+        # В payload едут только идентификаторы. Имя отправителя и название чата
+        # раньше уходили в FCM открытым текстом: сам текст сообщения Google не
+        # видел, но видел, кто кому и когда пишет. Теперь имя подставляет
+        # устройство из локального справочника (NameStore.java).
         data = {
             "chat_id": str(chat.id),
             "event": "message",
             "type": event.type,
-            "sender": sender.name,
+            "sender_id": str(sender.id),
             "body": body,
         }
-        if chat.name:
-            data["chat_name"] = chat.name
         # Шифротекст едет как есть: расшифровать его может только устройство
         # получателя, сервер и FCM видят лишь непрозрачный blob.
         if event.type == "text" and len(event.text) <= MAX_PUSH_CIPHERTEXT:
             data["ct"] = event.text
         await self.notifications.notify_users(
             offline_ids,
-            title=sender.name,
+            # Заголовок виден FCM, поэтому он нейтральный. Android рисует
+            # уведомление сам и подставляет настоящее имя; остальным
+            # платформам достанется общая подпись — расшифровать текст они
+            # всё равно не могут.
+            title="Dragram",
             body=body,
             data=data,
             decryptable=True,
@@ -241,14 +279,28 @@ class ChatsService:
         return event
 
     async def handle_incoming_event(self, data: dict, chat: ChatsOrm, user: UsersOrm) -> None:
+        if not isinstance(data, dict):
+            raise InvalidEvent("Event must be an object")
         if data.get("event") == "read":
             await self.mark_read(chat, user.id)
-        else:
+            return
+        try:
             incoming = WSSendMessage.model_validate(data)
-            await self.send_message(
-                user, chat, text=incoming.text, type=incoming.type,
-                client_id=incoming.client_id,
-            )
+        except ValidationError as exc:
+            # Раньше исключение всплывало в TaskGroup и рвало соединение —
+            # достаточно было одного кривого JSON, чтобы чат «отвалился».
+            raise InvalidEvent(exc.errors()[0].get("msg", "Malformed message")) from exc
+        await self._check_message_rate(user.id)
+        await self.send_message(
+            user, chat, text=incoming.text, type=incoming.type,
+            client_id=incoming.client_id,
+        )
+
+    async def _check_message_rate(self, user_id: uuid.UUID) -> None:
+        count = await hit_counter(self.redis, f"rl:ws:{user_id}", WS_MESSAGE_WINDOW)
+        if count is not None and count > MAX_WS_MESSAGES:
+            logger.warning("Websocket message flood: user_id=%s", user_id)
+            raise TooManyMessages()
 
 
     def get_pubsub_connection(self, chat_id: uuid.UUID) -> PubSubConnection:

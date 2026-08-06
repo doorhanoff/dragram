@@ -10,12 +10,14 @@ from .exceptions import PostNotFound, NotPostOwner, InvalidFileType
 from ..s3.exceptions import FileTooLarge, ProblemWithUploadingFiles
 from ..s3.service import S3Service
 from src.config import ALLOWED_MEDIA_TYPES, MAX_FILE_SIZE
+from src.core.quota import UploadQuota
 
 
 class PostsService:
-    def __init__(self, repo: PostsRepository, s3: S3Service):
+    def __init__(self, repo: PostsRepository, s3: S3Service, quota: UploadQuota):
         self.repo = repo
         self.s3 = s3
+        self.quota = quota
 
     async def create(self, data: CreatePost, user_id: uuid.UUID) -> PostsOrm:
         post = await self.repo.create(data, user_id)
@@ -87,6 +89,7 @@ class PostsService:
             raise InvalidFileType
         if any(f.size and f.size > MAX_FILE_SIZE for f in files):
             raise FileTooLarge()
+        await self.quota.consume_all(user_id, [f.size for f in files])
 
         results = await asyncio.gather(
             *[self.s3.upload_file(f.file, f.content_type) for f in files],

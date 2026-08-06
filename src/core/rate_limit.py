@@ -39,7 +39,26 @@ async def _hit(redis: Redis, key: str, window: int) -> int | None:
         _, count = await pipe.execute()
         return count
     except RedisError as exc:
-        logger.warning("Rate limiter unavailable, letting request through: %s", exc)
+        logger.warning("Rate limiter unavailable: %s", exc)
+        return None
+
+
+async def hit_counter(redis: Redis, key: str, window: int) -> int | None:
+    """Счётчик с окном для лимитов вне HTTP-зависимостей: сообщения в
+    websocket, неудачные входы по номеру, суточная квота загрузок."""
+    return await _hit(redis, key, window)
+
+
+async def add_to_counter(redis: Redis, key: str, amount: int, window: int) -> int | None:
+    """То же, но прибавляет произвольную величину — для квоты в байтах."""
+    try:
+        pipe = redis.pipeline()
+        pipe.set(key, 0, ex=window, nx=True)
+        pipe.incrby(key, amount)
+        _, total = await pipe.execute()
+        return total
+    except RedisError as exc:
+        logger.warning("Quota counter unavailable: %s", exc)
         return None
 
 
@@ -51,7 +70,14 @@ def _too_many_requests(window: int) -> HTTPException:
     )
 
 
-def make_rate_limiter(max_requests: int = 60, window: int = 60):
+def make_rate_limiter(max_requests: int = 60, window: int = 60, *, fail_closed: bool = False):
+    """fail_closed=True — при недоступном Redis запрос отклоняется.
+
+    По умолчанию лимитер «падает в открытую»: без Redis чат и так почти не
+    работает, и ронять всё остальное из-за счётчиков незачем. Но на входе и
+    регистрации приоритет обратный: уронив Redis, атакующий иначе снимал бы
+    ограничение на перебор паролей.
+    """
     async def rate_limiter(
         conn: HTTPConnection,
         redis: Redis = Depends(get_redis_client),
@@ -59,7 +85,9 @@ def make_rate_limiter(max_requests: int = 60, window: int = 60):
         client_ip = _client_ip(conn.headers, conn.client)
         key = f"rl:ip:{client_ip}:{_route_path(conn.scope)}"
         count = await _hit(redis, key, window)
-        if count is None or count <= max_requests:
+        if count is None and not fail_closed:
+            return
+        if count is not None and count <= max_requests:
             return
         if conn.scope["type"] == "websocket":
             raise WebSocketException(code=4029, reason="Too many connection attempts")

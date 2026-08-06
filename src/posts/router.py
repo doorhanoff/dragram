@@ -1,10 +1,10 @@
 import uuid
 from typing import Annotated, Literal
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, status
 from .depends import get_posts_service
 from .schemas import CreatePost, PostsResponse, PostDetailResponse, CreateComment, CommentResponse
 from .service import PostsService
-from src.auth.depends import get_token_payload, get_optional_token_payload
+from src.auth.depends import get_token_payload
 from src.auth.schemas import TokenData
 from ..core.rate_limit import make_rate_limiter
 
@@ -23,22 +23,28 @@ def _post_from_dict(d: dict) -> PostsResponse:
     return data
 
 
+# Лента и комментарии закрыты авторизацией: сервис рассчитан на полсотни своих
+# людей, а раньше всю ленту с именами и аватарами авторов читал любой человек
+# из интернета — включая комментарии, где зависимости авторизации не было вовсе.
 @router.get("/", response_model=list[PostsResponse])
 async def get_all(
-    text: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
+    text: str | None = Query(default=None, max_length=100),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     filter: Literal["all", "friends", "saved"] = "all",
-    payload: TokenData | None = Depends(get_optional_token_payload),
+    payload: TokenData = Depends(get_token_payload),
     service: PostsService = Depends(get_posts_service),
 ):
-    current_user_id = payload.id if payload else None
-    rows = await service.search(text, limit, offset, filter, current_user_id)
+    rows = await service.search(text, limit, offset, filter, payload.id)
     return [_post_from_dict(r) for r in rows]
 
 
 @router.get("/{post_id}", response_model=PostDetailResponse)
-async def get_one(post_id: uuid.UUID, service: PostsService = Depends(get_posts_service)):
+async def get_one(
+    post_id: uuid.UUID,
+    _: TokenData = Depends(get_token_payload),
+    service: PostsService = Depends(get_posts_service),
+):
     return await service.get_detail(post_id)
 
 
@@ -100,8 +106,9 @@ async def add_comment(
 @router.get("/{post_id}/comments", response_model=list[CommentResponse])
 async def get_comments(
     post_id: uuid.UUID,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _: TokenData = Depends(get_token_payload),
     service: PostsService = Depends(get_posts_service),
 ):
     return await service.get_comments(post_id, limit, offset)

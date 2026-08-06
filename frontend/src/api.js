@@ -15,6 +15,50 @@ function clearTokens() {
   localStorage.removeItem('refresh_token')
 }
 
+// ── Доступ к медиа ─────────────────────────────────────────────────────────
+// Бакет в хранилище закрыт: файлы отдаёт сервер и только вошедшим. В <img src>
+// заголовок Authorization не задать, поэтому ссылки подписываются коротким
+// тикетом, который берётся один раз при входе.
+let _mediaTicket = localStorage.getItem('media_ticket')
+let _mediaTicketAt = Number(localStorage.getItem('media_ticket_at') || 0)
+let _mediaTicketTtl = Number(localStorage.getItem('media_ticket_ttl') || 0)
+
+function mediaTicketIsFresh() {
+  // Обновляем заранее (за 5 минут до конца), чтобы картинка не «моргнула»
+  // ровно в момент истечения.
+  return _mediaTicket && Date.now() - _mediaTicketAt < (_mediaTicketTtl - 300) * 1000
+}
+
+function saveMediaTicket(ticket, expiresIn) {
+  _mediaTicket = ticket
+  _mediaTicketAt = Date.now()
+  _mediaTicketTtl = expiresIn
+  localStorage.setItem('media_ticket', ticket)
+  localStorage.setItem('media_ticket_at', String(_mediaTicketAt))
+  localStorage.setItem('media_ticket_ttl', String(expiresIn))
+}
+
+function clearMediaTicket() {
+  _mediaTicket = null
+  localStorage.removeItem('media_ticket')
+  localStorage.removeItem('media_ticket_at')
+  localStorage.removeItem('media_ticket_ttl')
+}
+
+/**
+ * Превращает сохранённый в базе адрес файла в ссылку, которую можно поставить
+ * в src. Ключ вычленяем по префиксу uploads/ — так функция не зависит от того,
+ * какой endpoint и бакет настроены на сервере, и не трогает чужие адреса.
+ */
+export function mediaSrc(url) {
+  if (!url) return url
+  const i = url.indexOf('/uploads/')
+  if (i === -1) return url
+  const key = url.slice(i + 1)
+  const query = _mediaTicket ? `?t=${encodeURIComponent(_mediaTicket)}` : ''
+  return `${BASE}/media/${key}${query}`
+}
+
 let _refreshing = false
 let _refreshQueue = []
 
@@ -100,10 +144,25 @@ export const api = {
     return data
   },
   register:        (data)          => req('POST', '/auth/register', data),
-  logout: async () => {
-    const data = await req('POST', '/auth/logout')
+  logout: async (allDevices = false) => {
+    // refresh_token передаём явно: на мобильном кук нет, и без этого выход
+    // не отзывал ничего — токен оставался рабочим ещё неделю.
+    const body = { refresh_token: getRefreshToken(), all_devices: allDevices }
+    const data = await req('POST', '/auth/logout', body).catch(() => null)
     clearTokens()
+    clearMediaTicket()
     return data
+  },
+
+  /** Одноразовый пропуск для websocket — вместо токена в query-строке. */
+  getWsTicket: () => req('POST', '/auth/ws-ticket'),
+
+  /** Тикет для ссылок на медиа. Вызывать после входа и при 401 на картинках. */
+  ensureMediaTicket: async (force = false) => {
+    if (!force && mediaTicketIsFresh()) return _mediaTicket
+    const data = await req('POST', '/media/ticket')
+    saveMediaTicket(data.ticket, data.expires_in)
+    return _mediaTicket
   },
   getChats:        ()              => req('GET',  '/chats/'),
   createChat:      (data)          => req('POST', '/chats/create',  data),
@@ -123,7 +182,20 @@ export const api = {
   getUserPublicKey:(id)            => req('GET',  `/auth/users/${id}/public-key`),
   setChatKeys:     (id, keys)      => req('POST', `/chats/${id}/keys`, { keys }),
   getMyChatKey:    (id)            => req('GET',  `/chats/${id}/keys/me`),
+  getMembersWithoutKeys: (id)      => req('GET',  `/chats/${id}/keys/missing`),
+  /** Смена ключевой пары E2EE. Переписка старым ключом станет нечитаемой. */
+  rotateKeys: (password, publicKey, keyBackup) =>
+    req('POST', '/auth/me/keys/rotate', {
+      password, public_key: publicKey, key_backup: keyBackup,
+    }),
   updateProfile:   (data)          => req('PATCH', '/auth/me', data),
+  /** Удаление аккаунта со всеми данными. Подтверждается паролем. */
+  deleteAccount: async (password) => {
+    const data = await req('DELETE', '/auth/me', { password })
+    clearTokens()
+    clearMediaTicket()
+    return data
+  },
   uploadAvatar:    (file)          => {
     const fd = new FormData()
     fd.append('photo', file)

@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Релизная конфигурация: только HTTPS.
+
+     Раньше здесь был разрешён открытый HTTP на 192.168.1.120 — отладочный
+     остаток, который уезжал в релизный APK: в любой сети, где этот адрес
+     удастся занять, трафик приложения можно было бы читать. Отладочный
+     вариант теперь лежит в src/debug/res/xml/ и в релиз не попадает
+     (ресурсы debug-варианта перекрывают main при сборке debug). -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.1.120</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

@@ -2,8 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- allowBackup="false": данные приложения — localStorage с JWT и IndexedDB
+         с приватным ключом E2EE. С allowBackup="true" они уезжали в Google Drive
+         пользователя и вытаскивались через adb backup с разблокированного
+         телефона. Для Android 12+ то же самое задаётся dataExtractionRules. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher_hearth"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_hearth_round"

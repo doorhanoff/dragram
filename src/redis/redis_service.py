@@ -1,8 +1,26 @@
 import logging
 import redis.asyncio as redis
+from urllib.parse import urlsplit, urlunsplit
+
 from src.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_url(url: str) -> str:
+    """Прячет пароль в rediss://user:пароль@host — иначе он уезжает в логи
+    целиком (ниже, в ветке без URL, он уже маскировался)."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "(unparsable)"
+    if not parts.password:
+        return url
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    netloc = f"{parts.username or ''}:***@{host}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 _redis: redis.Redis | None = None
 _redis_pubsub: redis.Redis | None = None
@@ -11,7 +29,7 @@ _redis_pubsub: redis.Redis | None = None
 async def init_redis():
     global _redis, _redis_pubsub
     if settings.REDIS_URL:
-        logger.info("Connecting to Redis via REDIS_URL: %s", settings.REDIS_URL)
+        logger.info("Connecting to Redis via REDIS_URL: %s", _mask_url(settings.REDIS_URL))
         _redis = redis.Redis.from_url(
             settings.REDIS_URL,
             decode_responses=True,

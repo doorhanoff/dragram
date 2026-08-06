@@ -1,4 +1,5 @@
 import React from 'react'
+import { mediaSrc } from '../../api'
 
 const PALETTE = [
   ['#F0C29B','#9C5A28'], ['#9FC2D2','#2E586B'], ['#B7C3A8','#46562F'],
@@ -33,7 +34,7 @@ export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 
     <div className={`relative flex-shrink-0 ${className}`} style={{ width: size, height: size }}>
       {imageUrl ? (
         <img
-          src={imageUrl}
+          src={mediaSrc(imageUrl)}
           alt={name}
           loading="lazy"
           className="rounded-full object-cover w-full h-full"

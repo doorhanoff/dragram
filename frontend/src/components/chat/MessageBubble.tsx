@@ -5,7 +5,7 @@ import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import VideoThumb from '../ui/VideoThumb'
 import ForwardModal from './ForwardModal'
-import { api } from '../../api'
+import { api, mediaSrc } from '../../api'
 
 function fmtTime(dt?: string): string {
   if (!dt) return ''
@@ -57,7 +57,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <img src={msg.text} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
+          <img src={mediaSrc(msg.text)} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
             onClick={() => setLightbox(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
@@ -68,7 +68,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
         </div>
         {lightbox && (
           <ImageLightbox
-            images={[msg.text]}
+            images={[mediaSrc(msg.text)]}
             startIndex={0}
             onClose={() => setLightbox(false)}
             onForward={() => setForwarding(true)}
@@ -90,7 +90,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <VideoThumb src={msg.text} poster={msg.thumbnail_url} onClick={() => setVideoOpen(true)} />
+          <VideoThumb src={mediaSrc(msg.text)} poster={mediaSrc(msg.thumbnail_url)} onClick={() => setVideoOpen(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
               <span className="text-[10px] text-white/80">{time}</span>
@@ -98,7 +98,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
             </div>
           )}
         </div>
-        {videoOpen && <VideoLightbox src={msg.text} onClose={() => setVideoOpen(false)} />}
+        {videoOpen && <VideoLightbox src={mediaSrc(msg.text)} onClose={() => setVideoOpen(false)} />}
       </div>
     )
   }
@@ -112,7 +112,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
           </svg>
-          <audio src={msg.text} controls className="h-7 flex-1" style={{ minWidth: 0 }} />
+          <audio src={mediaSrc(msg.text)} controls className="h-7 flex-1" style={{ minWidth: 0 }} />
           {isSent && <Checks isRead={msg.is_read} white />}
         </div>
       </div>

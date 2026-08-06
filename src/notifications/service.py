@@ -1,8 +1,11 @@
 import asyncio
+import logging
 import uuid
 
 from .repo import NotificationsRepository
 from .fcm import send_push
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationsService:
@@ -10,7 +13,14 @@ class NotificationsService:
         self.repo = repo
 
     async def register_token(self, user_id: uuid.UUID, token: str, platform: str) -> None:
-        await self.repo.register(user_id, token, platform)
+        previous_owner = await self.repo.register(user_id, token, platform)
+        if previous_owner:
+            # Штатно это смена аккаунта на том же телефоне. Но так же выглядит
+            # и угон: зная чужой FCM-токен, его можно привязать к своему
+            # аккаунту, и жертва перестанет получать свои уведомления.
+            logger.warning(
+                "Push token moved between accounts: from=%s to=%s", previous_owner, user_id
+            )
         await self.repo.commit()
 
     async def unregister_token(self, user_id: uuid.UUID, token: str) -> None:

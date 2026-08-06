@@ -29,7 +29,8 @@ export default function GroupChatModal({ currentUserId, onClose, onCreate }: Pro
 
   useEffect(() => {
     clearTimeout(timerRef.current)
-    if (!query.trim()) { setResults([]); return }
+    // Поиск по серверу — от 3 символов.
+    if (query.trim().length < 3) { setResults([]); return }
     setSearching(true)
     timerRef.current = setTimeout(async () => {
       try {

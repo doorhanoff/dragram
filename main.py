@@ -20,19 +20,31 @@ async def lifespan(app: FastAPI):
     await close_redis()
 
 
-app = FastAPI(lifespan=lifespan)
+# Документация — только в разработке: полная карта API закрытого сервиса
+# облегчает работу тому, кто ищет в нём дыры, а своим она не нужна.
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"http://192\.168\.\d+\.\d+(:\d+)?",
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-Path("media").mkdir(exist_ok=True)
-app.mount("/media", StaticFiles(directory="media"), name="media")
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Для healthcheck в docker-compose: раньше он дёргал /docs, из-за чего
+    документацию нельзя было выключить."""
+    return {"status": "ok"}
+
 
 app.include_router(router)
 

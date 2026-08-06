@@ -5,7 +5,8 @@
 # поэтому локальная копия не спасёт от потери самого сервера. Object Storage
 # лежит отдельно и уже оплачен.
 #
-# Ставится в cron скриптом install-backup-cron.sh, вручную запускается так:
+# Ставится в cron скриптом install-backup-cron.sh (лежит рядом), вручную
+# запускается так:
 #   sh /opt/dragram/deploy/backup-db.sh
 
 set -e
@@ -39,6 +40,11 @@ echo "    готово: $FILE ($SIZE байт)"
 echo "==> Выгружаю в Object Storage"
 # boto3 и ключи S3 уже есть внутри контейнера приложения — ничего
 # дополнительно на сервер ставить не нужно.
+#
+# Бэкапы уходят в ОТДЕЛЬНЫЙ приватный бакет (S3_BACKUP_BUCKET). Раньше они
+# лежали рядом с медиа, в том самом бакете, который сайт раздавал наружу
+# через /media/ — то есть дамп со всеми хешами паролей, телефонами и
+# зашифрованными приватными ключами скачивался по прямой ссылке.
 $COMPOSE exec -T app uv run python -c '
 import os, sys, datetime
 import boto3
@@ -46,14 +52,20 @@ import boto3
 key = "backups/" + sys.argv[1]
 keep_days = int(sys.argv[2])
 
+bucket = os.environ.get("S3_BACKUP_BUCKET", "")
+if not bucket:
+    sys.exit("S3_BACKUP_BUCKET не задан. Бэкапы нельзя класть в бакет с медиа: "
+             "он раздаётся клиентам. Заведите отдельный приватный бакет.")
+if bucket == os.environ.get("S3_BUCKET"):
+    sys.exit("S3_BACKUP_BUCKET совпадает с S3_BUCKET — нужен отдельный бакет.")
+
 s3 = boto3.client(
     "s3",
     endpoint_url=os.environ["S3_ENDPOINT"],
     region_name=os.environ.get("S3_REGION", "ru-central1"),
-    aws_access_key_id=os.environ["S3_ACCESS_KEY"],
-    aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+    aws_access_key_id=os.environ.get("S3_BACKUP_ACCESS_KEY") or os.environ["S3_ACCESS_KEY"],
+    aws_secret_access_key=os.environ.get("S3_BACKUP_SECRET_KEY") or os.environ["S3_SECRET_KEY"],
 )
-bucket = os.environ["S3_BUCKET"]
 
 s3.upload_fileobj(sys.stdin.buffer, bucket, key)
 print("    загружено:", key)

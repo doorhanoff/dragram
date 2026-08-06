@@ -1,3 +1,9 @@
+# Конфигурация ДЛЯ РАЗРАБОТКИ. На сервере не запускать: боевой файл —
+# docker-compose.prod.yaml.
+#
+# Все порты привязаны к 127.0.0.1: Docker пишет правила напрямую в iptables,
+# в обход ufw, поэтому "ufw allow" из bootstrap-server.sh от опубликованного
+# порта не защищает — база и Redis торчали бы в интернет.
 services:
   db:
     image: postgres:16
@@ -6,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "${DB_PORT}:5432"
+      - "127.0.0.1:${DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +24,7 @@ services:
   redis:
     image: redis:7
     ports:
-      - "${REDIS_PORT}:6379"
+      - "127.0.0.1:${REDIS_PORT}:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -28,19 +34,21 @@ services:
     expose:
       - "8000"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     environment:
       DB_HOST: db
       REDIS_HOST: redis
+      # Локальная разработка: /docs включены, куки без Secure, CORS с localhost.
+      DEBUG: "true"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -51,8 +59,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      S3_BUCKET: ${S3_BUCKET}
     depends_on:
       fastapi:
         condition: service_healthy

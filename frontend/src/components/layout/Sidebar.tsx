@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconMessage2, IconLayoutList, IconLogout, IconPhoto } from '@tabler/icons-react'
 import type { NavSection, User } from '../../types'
+import { mediaSrc } from '../../api'
 
 interface Props {
   user: User
@@ -37,7 +38,7 @@ export default function Sidebar({ user, active, onNavigate, onLogout, onProfile 
       {/* Аватар пользователя */}
       <button className="mb-3 cursor-pointer" title="Профиль" onClick={() => onProfile?.()}>
         {user.image_url
-          ? <img src={user.image_url} className="w-[38px] h-[38px] rounded-full object-cover" alt={user.name} />
+          ? <img src={mediaSrc(user.image_url)} className="w-[38px] h-[38px] rounded-full object-cover" alt={user.name} />
           : <div className="w-[38px] h-[38px] rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent font-extrabold select-none" style={{ fontSize: 14 }}>
               {initials}
             </div>

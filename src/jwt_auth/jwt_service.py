@@ -127,6 +127,10 @@ class JWTManager:
     def _token_state_key(token_type: TokenType, jti: str) -> str:
         return f"{token_type.value}_token:{jti}"
 
+    @staticmethod
+    def _user_epoch_key(subject: str) -> str:
+        return f"user_epoch:{subject}"
+
     async def create_token(
         self,
         subject: str,
@@ -200,17 +204,22 @@ class JWTManager:
             raise TokenTypeMismatchError(
                 f"Expected {expected_type.value!r}, got {actual_type.value!r}."
             )
+        # Fail-closed: раньше при недоступном Redis отозванный токен принимался
+        # («доверяем подписи»), то есть достаточно было уронить Redis, чтобы
+        # разлогин перестал что-либо значить. Отсутствие ключа — это по-прежнему
+        # «не отзывался»; отказываем только когда проверить нечем.
         try:
             token_status = await self.redis.get(self._token_state_key(actual_type, jti))
+            epoch = await self.redis.get(self._user_epoch_key(raw["sub"]))
         except Exception as e:
-            logger.warning("Redis unavailable during token verify, trusting JWT signature: %s", e)
-            token_status = None
-        if actual_type == TokenType.REFRESH:
-            if token_status == RefreshTokenStatus.REVOKED.value:
-                raise TokenRevokedError(f"Token jti={jti} has been revoked.")
-            # если Redis недоступен (None) — доверяем подписи
-        elif token_status == RefreshTokenStatus.REVOKED.value:
+            logger.warning("Redis unavailable during token verify, rejecting token: %s", e)
+            raise TokenRevokedError("Cannot verify token state.") from e
+
+        if token_status == RefreshTokenStatus.REVOKED.value:
             raise TokenRevokedError(f"Token jti={jti} has been revoked.")
+        # «Выйти на всех устройствах»: всё, что выпущено до отметки, недействительно.
+        if epoch is not None and int(raw["iat"]) < int(epoch):
+            raise TokenRevokedError("Token issued before the user's revocation epoch.")
 
         extra = {k: v for k, v in raw.items()
                  if k not in {"sub", "iat", "exp", "jti", "iss", "aud", "nbf", "token_type"}}
@@ -226,7 +235,15 @@ class JWTManager:
         *,
         extra: dict[str, Any] | None = None,
     ) -> TokenPair:
-        payload = await self.verify_token(refresh_token, expected_type=TokenType.REFRESH)
+        try:
+            payload = await self.verify_token(refresh_token, expected_type=TokenType.REFRESH)
+        except TokenRevokedError:
+            # Повторное использование уже отозванного refresh-токена означает,
+            # что токен где-то утёк: настоящий владелец его уже обменял.
+            # Кто из двоих сейчас стучится — неизвестно, поэтому валим всю
+            # «семью»: оба останутся снаружи, владелец просто войдёт заново.
+            await self._revoke_family_after_reuse(refresh_token)
+            raise
         await self.revoke_token(refresh_token)
         new_access   = await self.create_token(payload.sub, token_type=TokenType.ACCESS,  extra=extra)
         new_refresh  = await self.create_token(payload.sub, token_type=TokenType.REFRESH)
@@ -249,6 +266,36 @@ class JWTManager:
             RefreshTokenStatus.REVOKED.value,
             ex=ttl,
         )
+
+    async def revoke_all_for_user(self, subject: str) -> None:
+        """Отзывает все выданные ранее токены пользователя разом.
+
+        Перебирать jti не нужно: храним отметку времени, а `verify_token`
+        отклоняет всё, что выпущено до неё. Ключ живёт столько же, сколько
+        самый долгий токен — после этого сравнивать уже не с чем.
+
+        Точность — одна секунда: claim `iat` целочисленный, поэтому токен,
+        выпущенный в ту же секунду, что и отзыв, уцелеет. Брать `now + 1`
+        нельзя — тогда не работал бы вход сразу после «выйти везде»."""
+        await self.redis.set(
+            self._user_epoch_key(subject), int(time.time()), ex=self._refresh_ttl
+        )
+
+    async def _revoke_family_after_reuse(self, token: str) -> None:
+        try:
+            raw = jwt.decode(
+                token, self._verify_key, algorithms=[self._algorithm],
+                options={"verify_exp": False, "require": ["sub"]},
+                **({"issuer": self._issuer} if self._issuer else {}),
+                **({"audience": self._audience} if self._audience else {}),
+            )
+        except Exception:
+            return  # подпись не наша — отзывать нечего
+        logger.warning("Refresh token reuse detected, revoking all sessions: user_id=%s", raw["sub"])
+        try:
+            await self.revoke_all_for_user(raw["sub"])
+        except Exception as exc:
+            logger.error("Could not revoke sessions after token reuse: %s", exc)
 
     @staticmethod
     def generate_secret(length: int = 64) -> str:

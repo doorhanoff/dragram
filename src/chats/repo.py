@@ -20,6 +20,13 @@ class ChatsRepository(BaseRepository):
         result = await self.session.execute(query)
         return result.scalar_one()
 
+    async def all_users_exist(self, user_ids: list[uuid.UUID]) -> bool:
+        from src.auth.models import UsersOrm
+        res = await self.session.execute(
+            select(func.count()).select_from(UsersOrm).where(UsersOrm.id.in_(user_ids))
+        )
+        return res.scalar_one() == len(set(user_ids))
+
     async def get_by_id(self, item_id: uuid.UUID) -> ChatsOrm | None:
         query = select(ChatsOrm).where(ChatsOrm.id == item_id)
         res = await self.session.execute(query)
@@ -146,6 +153,24 @@ class ChatsRepository(BaseRepository):
         stmt = pg_insert(ChatKeysOrm).values(rows)
         stmt = stmt.on_conflict_do_nothing(index_elements=["chat_id", "user_id"])
         await self.session.execute(stmt)
+
+    async def members_without_keys(self, chat_id: uuid.UUID) -> list[uuid.UUID]:
+        """Участники чата, для которых ключ ещё не выложен.
+
+        Такое бывает, когда участник сменил ключевую пару (старые строки при
+        этом удаляются) — иначе он остался бы в группе без доступа к её ключу
+        навсегда: set_chat_keys не перезаписывает уже существующие строки.
+        """
+        having_keys = select(ChatKeysOrm.user_id).where(ChatKeysOrm.chat_id == chat_id)
+        query = (
+            select(chat_members.c.user_id)
+            .where(
+                chat_members.c.chat_id == chat_id,
+                chat_members.c.user_id.notin_(having_keys),
+            )
+        )
+        res = await self.session.execute(query)
+        return [row[0] for row in res.all()]
 
     async def get_my_chat_key(self, chat_id: uuid.UUID, user_id: uuid.UUID) -> ChatKeysOrm | None:
         query = select(ChatKeysOrm).where(

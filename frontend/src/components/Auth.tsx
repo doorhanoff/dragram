@@ -99,7 +99,9 @@ export default function Auth({ onLogin }: Props) {
           </div>
           <div className="h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" className="flex-shrink-0"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-            <input value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" required type="password" minLength={8}
+            {/* maxLength=128: Argon2 длину не ограничивает, а прежний потолок в
+                50 символов мешал длинным парольным фразам — самым надёжным. */}
+            <input value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" required type="password" minLength={8} maxLength={128}
               className="flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold" />
           </div>
 

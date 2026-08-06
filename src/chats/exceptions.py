@@ -24,3 +24,31 @@ class KeyTargetNotMember(HTTPException):
 class TooLargeSize(HTTPException):
     def __init__(self):
         super().__init__(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File size is too large")
+
+
+class ForeignMediaUrl(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Media url does not belong to this service",
+        )
+
+
+class UnknownMember(HTTPException):
+    def __init__(self):
+        # 400, а не 500: несуществующий участник — это ошибка запроса, а не
+        # сбой сервера (раньше сюда прилетало нарушение внешнего ключа).
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown chat member")
+
+
+class TooManyMessages(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много сообщений подряд.",
+        )
+
+
+class InvalidEvent(HTTPException):
+    def __init__(self, detail: str = "Malformed event"):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)

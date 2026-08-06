@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     S3_BUCKET: str = ""
     S3_ACCESS_KEY: str = ""
     S3_SECRET_KEY: str = ""
+    # Бэкапы базы лежат в ОТДЕЛЬНОМ приватном бакете — в бакет с медиа их класть
+    # нельзя: он раздаётся клиентам, и дамп с хешами паролей и key_backup
+    # оказался бы скачиваемым по прямой ссылке.
+    S3_BACKUP_BUCKET: str = ""
+    # Сколько живёт presigned-ссылка на медиафайл. Достаточно, чтобы открыть
+    # картинку или досмотреть видео, и мало, чтобы ссылка что-то значила,
+    # утекнув в лог или в чужую историю браузера.
+    MEDIA_LINK_TTL: int = 900
+    # Суточная квота на загрузки одного пользователя (байт). Без неё один
+    # аккаунт забивает диск VPS и счёт за Object Storage за несколько минут.
+    UPLOAD_DAILY_QUOTA: int = 1024 * 1024 * 1024
 
     # Пул соединений с БД. Потолок одновременно открытых коннектов на один
     # процесс приложения — DB_POOL_SIZE + DB_MAX_OVERFLOW; при нескольких
@@ -56,6 +67,9 @@ class Settings(BaseSettings):
     # Боевой домен. Пусто при локальной разработке; на сервере задаётся в .env
     # и попадает в список разрешённых CORS-origin'ов.
     DOMAIN: str = ""
+    # Режим разработки: включает /docs, /redoc и /openapi.json и разрешает
+    # CORS с localhost и из локальной сети. На сервере всегда false.
+    DEBUG: bool = False
     # Дополнительные origin'ы через запятую — на случай, если фронтенд
     # обслуживается с другого адреса, чем DOMAIN.
     CORS_ORIGINS: str = ""
@@ -70,19 +84,37 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
     @property
+    def is_production(self) -> bool:
+        return bool(self.DOMAIN) and not self.DEBUG
+
+    @property
     def cors_origins(self) -> list[str]:
-        """Локальная разработка, мобильное приложение и боевой домен."""
+        """Мобильное приложение, боевой домен и — только в разработке — localhost."""
+        # Origin'ы WebView в Capacitor: приложение обращается к API кросс-доменно
+        # и в проде тоже, поэтому они нужны всегда.
         origins = [
-            "http://localhost:5173",
-            "http://localhost:3000",
             "capacitor://localhost",
             "https://localhost",
-            "http://localhost",
         ]
+        if not self.is_production:
+            origins += [
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost",
+            ]
         if self.DOMAIN:
             origins.append(f"https://{self.DOMAIN}")
         origins.extend(o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip())
         return origins
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """Любое устройство домашней сети — это удобно при отладке телефона,
+        но вместе с allow_credentials=True в проде это дыра: сайт из локальной
+        сети смог бы делать авторизованные запросы. Только для разработки."""
+        if self.is_production:
+            return None
+        return r"http://192\.168\.\d+\.\d+(:\d+)?"
 
     @property
     def asyncpg_database_url(self) -> str:

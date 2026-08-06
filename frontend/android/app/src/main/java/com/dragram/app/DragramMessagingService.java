@@ -97,7 +97,12 @@ public class DragramMessagingService extends MessagingService {
         String chatId = data.get("chat_id");
         if (chatId == null || !"message".equals(data.get("event"))) return;
 
-        String sender = orDefault(data.get("sender"), "Dragram");
+        // Имя отправителя и название чата приходят идентификаторами и
+        // подставляются из локального справочника: серверу и FCM незачем знать,
+        // кто кому пишет. Если имени ещё нет (справочник наполняется при
+        // загрузке списка чатов) — показываем нейтральную подпись.
+        String sender = orDefault(NameStore.get(this, data.get("sender_id")), "Dragram");
+        String chatName = NameStore.get(this, chatId);
         String fallback = orDefault(data.get("body"), "Новое сообщение");
 
         String text = null;
@@ -108,7 +113,7 @@ public class DragramMessagingService extends MessagingService {
         }
         if (text == null || text.isEmpty()) text = fallback;
 
-        showNotification(chatId, data.get("chat_name"), sender, text);
+        showNotification(chatId, chatName, sender, text);
     }
 
     /**

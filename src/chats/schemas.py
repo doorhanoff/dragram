@@ -4,18 +4,29 @@ from typing import Literal
 import datetime
 
 
+# Потолки на строковые поля. Все они пишутся в Text-колонки, и без ограничения
+# один пользователь может залить в базу мегабайтные строки в любом количестве.
+# Шифротекст в base64 длиннее исходника примерно в 1.4 раза, так что 8000
+# символов — это ~5 КБ текста сообщения.
+MAX_MESSAGE_TEXT = 8000
+MAX_MEDIA_URL = 500
+MAX_CHAT_NAME = 100
+MAX_CHAT_MEMBERS = 100
+MAX_ENCRYPTED_KEY = 2000
+
+
 class ChatKeyItem(BaseModel):
     user_id: uuid.UUID
-    encrypted_key: str
+    encrypted_key: str = Field(min_length=1, max_length=MAX_ENCRYPTED_KEY)
 
 
 class SetChatKeys(BaseModel):
-    keys: list[ChatKeyItem] = Field(min_length=1)
+    keys: list[ChatKeyItem] = Field(min_length=1, max_length=MAX_CHAT_MEMBERS)
 
 
 class CreateChat(BaseModel):
-    name: str | None = Field(default=None)
-    members: list[uuid.UUID] = Field(min_length=1)
+    name: str | None = Field(default=None, max_length=MAX_CHAT_NAME)
+    members: list[uuid.UUID] = Field(min_length=1, max_length=MAX_CHAT_MEMBERS)
 
 
 class CreateChatDb(BaseModel):
@@ -78,9 +89,12 @@ class MessageDbSchema(BaseModel):
 
 
 class ForwardMessage(BaseModel):
-    text: str
+    # text здесь — всегда ссылка на файл. Что она ведёт именно в наше
+    # хранилище, проверяет сервис: иначе в чат можно переслать «картинку»
+    # с чужого адреса, и клиенты сами сходят на него, слив IP и факт прочтения.
+    text: str = Field(min_length=1, max_length=MAX_MEDIA_URL)
     type: Literal["image", "video", "audio"]
-    thumbnail_url: str | None = None
+    thumbnail_url: str | None = Field(default=None, max_length=MAX_MEDIA_URL)
 
 
 # ── websocket / pub-sub events ──────────────────────────────────────────────
@@ -90,7 +104,7 @@ class ForwardMessage(BaseModel):
 
 class WSSendMessage(BaseModel):
     event: Literal["message"] = "message"
-    text: str
+    text: str = Field(min_length=1, max_length=MAX_MESSAGE_TEXT)
     type: Literal["text", "image", "video", "audio"] = "text"
     # Клиентский id для оптимистичного UI: сервер не хранит его, а просто
     # возвращает в MessageEvent, чтобы отправитель сопоставил эхо со своим

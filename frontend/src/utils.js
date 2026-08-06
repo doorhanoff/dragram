@@ -41,7 +41,8 @@ export function fmtDay(dt) {
 
 // Скачивает файл по URL как вложение (а не открывает в новой вкладке)
 export async function downloadUrl(url, filename) {
-  const name = filename || url.split('/').pop() || 'file'
+  // Ссылки на медиа подписаны тикетом (?t=...) — в имя файла он попасть не должен.
+  const name = filename || url.split('?')[0].split('/').pop() || 'file'
   try {
     const res = await fetch(url)
     const blob = await res.blob()

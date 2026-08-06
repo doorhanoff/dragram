@@ -85,7 +85,9 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
 
   useEffect(() => {
     clearTimeout(timer.current)
-    if (!query.trim()) { setSearch([]); return }
+    // Сервер требует минимум 3 символа: по одной букве раньше выгружалась
+    // половина базы пользователей.
+    if (query.trim().length < 3) { setSearch([]); return }
     setSearching(true)
     timer.current = setTimeout(async () => {
       try {
@@ -195,6 +197,7 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
       {profileId && (
         <ProfileModal
           userId={profileId}
+          myId={user.id}
           isMe={profileId === user.id}
           onClose={() => setProfileId(null)}
           onStartChat={uid => { onStartChat(uid); setProfileId(null) }}

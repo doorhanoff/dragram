@@ -4,6 +4,8 @@ from typing import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, WebSocketException
 from redis.asyncio import Redis
+from src.core.depends import get_upload_quota
+from src.core.quota import UploadQuota
 from src.db.database import async_session, get_async_session
 from src.redis.depends import get_redis_client, get_redis_pubsub_client
 from .exceptions import NotChatMember
@@ -28,8 +30,9 @@ async def get_chats_service(
     redis: Redis = Depends(get_redis_client),
     redis_pubsub: Redis = Depends(get_redis_pubsub_client),
     notifications: NotificationsService = Depends(get_notifications_service),
+    quota: UploadQuota = Depends(get_upload_quota),
 ) -> ChatsService:
-    return ChatsService(repo, s3, redis, notifications, redis_pubsub)
+    return ChatsService(repo, s3, redis, notifications, redis_pubsub, quota)
 
 
 class ChatsServiceFactory:
@@ -47,10 +50,11 @@ class ChatsServiceFactory:
     трогает.
     """
 
-    def __init__(self, s3: S3Service, redis: Redis, redis_pubsub: Redis):
+    def __init__(self, s3: S3Service, redis: Redis, redis_pubsub: Redis, quota: UploadQuota):
         self._s3 = s3
         self._redis = redis
         self._redis_pubsub = redis_pubsub
+        self._quota = quota
 
     @asynccontextmanager
     async def __call__(self) -> AsyncIterator[ChatsService]:
@@ -61,6 +65,7 @@ class ChatsServiceFactory:
                 self._redis,
                 NotificationsService(NotificationsRepository(session)),
                 self._redis_pubsub,
+                self._quota,
             )
 
     def pubsub(self, chat_id: uuid.UUID) -> PubSubConnection:
@@ -71,8 +76,9 @@ async def get_chats_service_factory(
     s3: S3Service = Depends(get_s3_service),
     redis: Redis = Depends(get_redis_client),
     redis_pubsub: Redis = Depends(get_redis_pubsub_client),
+    quota: UploadQuota = Depends(get_upload_quota),
 ) -> ChatsServiceFactory:
-    return ChatsServiceFactory(s3, redis, redis_pubsub)
+    return ChatsServiceFactory(s3, redis, redis_pubsub, quota)
 
 
 async def get_chat(

@@ -3,7 +3,7 @@ import {
   IconArrowLeft, IconUpload, IconUserPlus, IconX, IconPlayerPlayFilled, IconDownload, IconUsers,
   IconChecks,
 } from '@tabler/icons-react'
-import { api } from '../../api'
+import { api, mediaSrc } from '../../api'
 import Avatar from '../ui/Avatar'
 import AddMemberModal from './AddMemberModal'
 import { downloadUrl } from '../../utils'
@@ -108,7 +108,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
     try {
       for (const m of materials) {
         if (!selected.has(m.id)) continue
-        await downloadUrl(m.link)
+        await downloadUrl(mediaSrc(m.link), m.link.split('/').pop())
         await sleep(300) // браузеры блокируют слишком частые одновременные скачивания
       }
     } finally {
@@ -244,7 +244,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
                     >
                       {isVideo(m.link) ? (
                         <>
-                          <video src={m.link} className="w-full h-full object-cover" preload="metadata" muted />
+                          <video src={mediaSrc(m.link)} className="w-full h-full object-cover" preload="metadata" muted />
                           {!selectMode && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
                               <div className="w-9 h-9 rounded-full bg-white/90 flex items-center justify-center">
@@ -254,7 +254,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
                           )}
                         </>
                       ) : (
-                        <img src={m.link} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
+                        <img src={mediaSrc(m.link)} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
                       )}
                       {selectMode && (
                         <div className={`absolute inset-0 transition-colors ${isSelected ? 'bg-accent/30' : 'bg-black/10'}`}>
@@ -283,7 +283,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
         >
           <div className="absolute top-4 right-4 flex items-center gap-2">
             <button
-              onClick={() => downloadUrl(active.link)}
+              onClick={() => downloadUrl(mediaSrc(active.link), active.link.split('/').pop())}
               title="Скачать"
               className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20"
             >
@@ -298,9 +298,9 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
             </button>
           </div>
           {isVideo(active.link) ? (
-            <video src={active.link} className="max-w-full max-h-full rounded-lg" controls autoPlay />
+            <video src={mediaSrc(active.link)} className="max-w-full max-h-full rounded-lg" controls autoPlay />
           ) : (
-            <img src={active.link} className="max-w-full max-h-full rounded-lg object-contain" />
+            <img src={mediaSrc(active.link)} className="max-w-full max-h-full rounded-lg object-contain" />
           )}
         </div>
       )}
