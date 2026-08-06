@@ -1,7 +1,7 @@
 # Продакшен-конфигурация для VPS.
 #
 # Отличия от docker-compose.yaml (локальная разработка):
-#   - нет контейнера с Postgres: база живёт в Supabase;
+#   - Postgres со своим томом и без публикации портов наружу;
 #   - образ приложения не собирается на сервере, а скачивается готовым
 #     (сборка Vite съедает ~1.5 ГБ RAM и на VPS с 2 ГБ падает с OOM);
 #   - Redis не публикует порт наружу — только во внутреннюю сеть Docker;
@@ -16,8 +16,12 @@ services:
     env_file:
       - .env
     environment:
-      # Перебивают значения из .env: внутри сети Docker Redis доступен по имени
-      # сервиса, а не по localhost.
+      # Перебивают значения из .env: внутри сети Docker база и Redis доступны
+      # по имени сервиса, а не по localhost.
+      DB_HOST: db
+      DB_PORT: 5432
+      # Трафик до базы не выходит за пределы сети Docker, TLS не нужен.
+      DB_SSL: "false"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       PORT: 8000
@@ -33,6 +37,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
       interval: 10s
@@ -44,6 +50,24 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:?нужно задать DB_USER в .env}
+      POSTGRES_PASSWORD: ${DB_PASS:?нужно задать DB_PASS в .env}
+      POSTGRES_DB: ${DB_NAME:?нужно задать DB_NAME в .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Порт наружу не публикуется: база доступна только приложению
+    # по внутренней сети Docker.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default_logging
 
   redis:
     image: redis:7-alpine
@@ -94,6 +118,7 @@ services:
     logging: *default_logging
 
 volumes:
+  postgres_data:
   redis_data:
   media_data:
   certbot_conf:
