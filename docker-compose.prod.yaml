@@ -97,9 +97,17 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - certbot_conf:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
-    # Раз в 6 часов перечитываем конфиг, чтобы подхватить обновлённый сертификат
-    command: >
-      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+    # Раз в 6 часов перечитываем конфиг, чтобы подхватить обновлённый сертификат.
+    #
+    # Первым делом вручную запускаем подстановку шаблонов: штатный
+    # docker-entrypoint.sh делает это, только если команда начинается с "nginx",
+    # а здесь она начинается с "/bin/sh" — без явного вызова конфиг из
+    # templates/ молча игнорировался бы, и nginx поднимался бы со стоковым
+    # default.conf (проверено на живом сервере).
+    # Разделитель после envsubst — именно ";", а не "&&": оператор && связывает
+    # сильнее фонового "&", и с ним nginx стартовал бы, не дождавшись
+    # подстановки шаблона.
+    command: /bin/sh -c "/docker-entrypoint.d/20-envsubst-on-templates.sh; while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
     depends_on:
       app:
         condition: service_healthy
