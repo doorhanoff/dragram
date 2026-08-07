@@ -114,6 +114,19 @@ async def get_comments(
     return await service.get_comments(post_id, limit, offset)
 
 
+@router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(make_rate_limiter(max_requests=30, window=60))])
+async def delete_post(
+    post_id: uuid.UUID,
+    service: PostsService = Depends(get_posts_service),
+    payload: TokenData = Depends(get_token_payload),
+):
+    """Удаляет свой пост вместе с комментариями и загруженными файлами."""
+    deleted = await service.delete_post(post_id, payload.id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found or not yours")
+
+
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT,
                dependencies=[Depends(make_rate_limiter(max_requests=30, window=60))])
 async def delete_comment(

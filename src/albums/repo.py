@@ -86,6 +86,18 @@ class AlbumsRepository(BaseRepository):
         )
         return result.scalar_one()
 
+    async def get_material(self, material_id: uuid.UUID) -> AlbumMaterialsOrm | None:
+        res = await self.session.execute(
+            select(AlbumMaterialsOrm).where(AlbumMaterialsOrm.id == material_id)
+        )
+        return res.scalar_one_or_none()
+
+    async def delete_material(self, material_id: uuid.UUID) -> None:
+        from sqlalchemy import delete as sa_delete
+        await self.session.execute(
+            sa_delete(AlbumMaterialsOrm).where(AlbumMaterialsOrm.id == material_id)
+        )
+
     async def get_materials(self, album_id: uuid.UUID) -> list[AlbumMaterialsOrm]:
         query = (
             select(AlbumMaterialsOrm)

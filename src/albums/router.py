@@ -68,6 +68,18 @@ async def get_materials(
     return await service.get_materials(album_id, payload.id)
 
 
+@router.delete("/{album_id}/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_material(
+    album_id: uuid.UUID,
+    material_id: uuid.UUID,
+    service: AlbumsService = Depends(get_albums_service),
+    payload: TokenData = Depends(get_token_payload),
+):
+    """Убирает файл из альбома вместе с самим файлом в хранилище.
+    Доступно тому, кто его выложил, и создателю альбома."""
+    await service.delete_material(album_id, material_id, payload.id)
+
+
 @router.post("/{album_id}/materials", response_model=list[MaterialResponse])
 async def upload_materials(
     album_id: uuid.UUID,

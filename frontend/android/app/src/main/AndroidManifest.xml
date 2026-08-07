@@ -99,4 +99,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Сохранение файлов из чата и альбомов в «Загрузки». Начиная с Android 10
+         запись идёт через MediaStore и разрешение не нужно, поэтому оно
+         ограничено старыми версиями. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 </manifest>

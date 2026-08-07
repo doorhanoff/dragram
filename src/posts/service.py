@@ -72,6 +72,20 @@ class PostsService:
             raise PostNotFound
         return await self.repo.get_comments(post_id, limit, offset)
 
+    async def delete_post(self, post_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """Удаляет свой пост вместе с файлами. Возвращает False, если поста
+        нет или он чужой — роутер превращает это в 404."""
+        urls = await self.repo.delete_post(post_id, user_id)
+        if urls is None:
+            return False
+        await self.repo.commit()
+        # Файлы убираем после коммита и best-effort: сбой в хранилище не
+        # должен отменять уже удалённый пост, но и молча копить мусор нельзя —
+        # delete_file пишет о таком в лог.
+        for url in urls:
+            await self.s3.delete_file(url)
+        return True
+
     async def delete_comment(self, comment_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         deleted = await self.repo.delete_comment(comment_id, user_id)
         await self.repo.commit()

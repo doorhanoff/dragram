@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { IconArrowLeft, IconSend, IconCornerDownRight, IconX } from '@tabler/icons-react'
+import { IconArrowLeft, IconSend, IconCornerDownRight, IconTrash, IconX } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import type { Post, Comment } from '../../types'
@@ -24,6 +24,7 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   const [loading,       setLoading]  = useState(true)
   const [sending,       setSending]  = useState(false)
   const [lightbox,      setLightbox] = useState<number | null>(null)
+  const [deleting,      setDeleting] = useState(false)
   const [replyTo,       setReplyTo]  = useState<Comment | null>(null)
   const [activeComment, setActiveComment] = useState<string | null>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -36,6 +37,21 @@ export default function PostThread({ postId, userId, onBack }: Props) {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [postId])
+
+  async function removePost() {
+    // Пост уносит с собой комментарии и загруженные файлы, поэтому
+    // переспрашиваем: вернуть их будет неоткуда.
+    if (!post || !confirm('Удалить пост? Вместе с ним исчезнут комментарии и загруженные файлы.')) return
+    setDeleting(true)
+    try {
+      await api.deletePost(post.id)
+      onBack()
+    } catch (e: any) {
+      alert('Не удалось удалить: ' + e.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   async function send() {
     if (!text.trim() || !postId || sending) return
@@ -78,6 +94,16 @@ export default function PostThread({ postId, userId, onBack }: Props) {
           <IconArrowLeft size={24} stroke={2.4} />
         </button>
         <span className="text-xl font-extrabold text-primary ellipsis flex-1">{post.title}</span>
+        {post.created_by_id === userId && (
+          <button
+            onClick={removePost}
+            disabled={deleting}
+            title="Удалить пост"
+            className="text-muted hover:text-red-500 transition-colors disabled:opacity-40"
+          >
+            <IconTrash size={20} stroke={1.9} />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">

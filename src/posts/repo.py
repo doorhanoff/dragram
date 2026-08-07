@@ -200,6 +200,32 @@ class PostsRepository(BaseRepository):
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none() is not None
 
+    async def delete_post(self, post_id: uuid.UUID, user_id: uuid.UUID) -> list[str] | None:
+        """Удаляет пост автора и возвращает ссылки на его файлы.
+
+        None — поста нет или он чужой; пустой список — удалён, но файлов не
+        было. Комментарии, лайки и закладки уходят каскадом (ON DELETE CASCADE
+        в схеме), а файлы в хранилище каскадом не удалятся — их ссылки
+        возвращаем сервису, у репозитория доступа к S3 нет.
+        """
+        from sqlalchemy import delete as sa_delete
+        stmt = (
+            sa_delete(PostsOrm)
+            .where(PostsOrm.id == post_id, PostsOrm.created_by_id == user_id)
+            .returning(PostsOrm.materials)
+        )
+        res = await self.session.execute(stmt)
+        rows = res.all()
+        if not rows:
+            return None
+        raw = rows[0][0]
+        if not raw:
+            return []
+        try:
+            return [u for u in json.loads(raw) if isinstance(u, str)]
+        except (TypeError, ValueError):
+            return []
+
     async def add_media(self, post_id: uuid.UUID, urls: list[str]) -> PostsOrm:
         """Добавляет список URL медиафайлов в materials поста."""
         # FOR UPDATE: read-modify-write по JSON-колонке; без блокировки два

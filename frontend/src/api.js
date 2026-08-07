@@ -75,6 +75,11 @@ function clearGateToken() {
   localStorage.removeItem('gate_token')
 }
 
+/** Заголовки с пропуском — для запросов мимо fetch (нативное скачивание). */
+export function gateHeaders() {
+  return _gateToken ? { 'X-Gate-Token': _gateToken } : {}
+}
+
 let _refreshing = false
 let _refreshQueue = []
 
@@ -287,6 +292,7 @@ export const api = {
       xhr.send(fd)
     })
   },
+  deletePost:     (id)                         => req('DELETE', `/posts/${id}`),
   getComments:    (postId, limit=50, offset=0) => req('GET',    `/posts/${postId}/comments?limit=${limit}&offset=${offset}`),
   addComment:     (postId, data)               => req('POST',   `/posts/${postId}/comments`, data),
   deleteComment:  (commentId)                  => req('DELETE', `/posts/comments/${commentId}`),
@@ -297,6 +303,7 @@ export const api = {
   addAlbumMember:   (id, userId)   => req('POST', `/albums/${id}/members`, { user_id: userId }),
   removeAlbumMember:(id, userId)   => req('DELETE', `/albums/${id}/members/${userId}`),
   getAlbumMaterials:(id)           => req('GET',  `/albums/${id}/materials`),
+  deleteAlbumMaterial: (id, materialId) => req('DELETE', `/albums/${id}/materials/${materialId}`),
   uploadAlbumMaterials: (id, files, onProgress) => {
     return new Promise((resolve, reject) => {
       const fd = new FormData()

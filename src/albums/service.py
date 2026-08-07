@@ -5,7 +5,7 @@ from fastapi import UploadFile
 from .repo import AlbumsRepository
 from .schemas import CreateAlbum
 from .models import AlbumsOrm, AlbumMaterialsOrm
-from .exceptions import AlbumNotFound, CannotRemoveOwner, NotAlbumMember, NotAlbumOwner, InvalidFileType
+from .exceptions import AlbumNotFound, CannotRemoveOwner, MaterialNotFound, NotAlbumMember, NotAlbumOwner, InvalidFileType
 from ..s3.exceptions import FileTooLarge, ProblemWithUploadingFiles
 from ..s3.service import S3Service
 from src.config import ALLOWED_MEDIA_TYPES, MAX_FILE_SIZE
@@ -66,6 +66,22 @@ class AlbumsService:
     async def get_materials(self, album_id: uuid.UUID, user_id: uuid.UUID) -> list[AlbumMaterialsOrm]:
         await self._get_album_for_member(album_id, user_id)
         return await self.repo.get_materials(album_id)
+
+    async def delete_material(self, album_id: uuid.UUID, material_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Удалить файл из альбома может тот, кто его выложил, или создатель
+        альбома — как с участниками: остальные не должны чистить чужое."""
+        album = await self._get_album_for_member(album_id, user_id)
+        material = await self.repo.get_material(material_id)
+        if not material or material.album_id != album_id:
+            raise MaterialNotFound
+        if material.published_by_id != user_id and album.creator_id != user_id:
+            raise NotAlbumOwner
+
+        await self.repo.delete_material(material_id)
+        await self.repo.commit()
+        # Файл убираем после коммита и best-effort — сбой в хранилище не
+        # должен отменять уже удалённую запись.
+        await self.s3.delete_file(material.link)
 
     async def upload_materials(self, album_id: uuid.UUID, files: list[UploadFile], user_id: uuid.UUID) -> list[AlbumMaterialsOrm]:
         await self._get_album_for_member(album_id, user_id)

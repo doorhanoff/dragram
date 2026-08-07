@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconArrowLeft, IconUpload, IconUserPlus, IconX, IconPlayerPlayFilled, IconDownload, IconUsers,
-  IconChecks,
+  IconChecks, IconTrash,
 } from '@tabler/icons-react'
 import { api, mediaSrc } from '../../api'
 import Avatar from '../ui/Avatar'
 import AddMemberModal from './AddMemberModal'
-import { downloadUrl } from '../../utils'
+import { downloadUrl, showToast } from '../../utils'
 import { useBackHandler } from '../../hooks/useBackHandler'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
@@ -52,6 +52,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   const [active, setActive] = useState<AlbumMaterial | null>(null)
   const [showAddMember, setShowAddMember] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -118,6 +119,29 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
     }
   }
 
+  async function deleteSelected() {
+    if (!materials || selected.size === 0) return
+    const count = selected.size
+    if (!confirm(`Удалить ${count} ${count === 1 ? 'файл' : 'файла(ов)'} из альбома? Отменить будет нельзя.`)) return
+    setDeleting(true)
+    const failed: string[] = []
+    try {
+      for (const m of materials) {
+        if (!selected.has(m.id)) continue
+        // Сервер разрешает удалять свои файлы и всё — создателю альбома;
+        // чужие в общем альбоме вернут 403, и это не повод обрывать остальные.
+        try { await api.deleteAlbumMaterial(albumId, m.id) } catch { failed.push(m.id) }
+      }
+      if (failed.length) showToast(`Не удалось удалить: ${failed.length} — это чужие файлы`)
+      load()
+      onChanged()
+    } finally {
+      setDeleting(false)
+      setSelectMode(false)
+      setSelected(new Set())
+    }
+  }
+
   async function onFiles(files: FileList | null) {
     if (!files || !files.length) return
     setUploading(true)
@@ -157,6 +181,15 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
               >
                 <IconDownload size={16} stroke={1.8} />
                 {downloading ? 'Скачивание…' : `Скачать${selected.size ? ` (${selected.size})` : ''}`}
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={selected.size === 0 || deleting}
+                title="Удалить выбранные"
+                className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-red-500 hover:border-red-500 transition-colors disabled:opacity-50"
+              >
+                <IconTrash size={16} stroke={1.8} />
+                <span className="hidden sm:inline">{deleting ? 'Удаление…' : 'Удалить'}</span>
               </button>
               <button
                 onClick={() => { setSelectMode(false); setSelected(new Set()) }}

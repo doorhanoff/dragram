@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { IconX } from '@tabler/icons-react'
+import { IconDownload, IconX } from '@tabler/icons-react'
 import { useBackHandler } from '../../hooks/useBackHandler'
+import { downloadUrl } from '../../utils'
 
 interface Props {
   src: string
@@ -34,13 +35,24 @@ export default function VideoLightbox({ src, onClose }: Props) {
       className={`fixed inset-0 z-[500] flex items-center justify-center transition-all duration-200 ${visible ? 'bg-black/90 backdrop-blur-xl' : 'bg-black/0 backdrop-blur-none'}`}
       onClick={close}
     >
-      <button
-        onClick={close}
-        className="absolute right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+      <div
+        className="absolute right-4 z-10 flex items-center gap-2"
         style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
       >
-        <IconX size={18} stroke={2} />
-      </button>
+        <button
+          onClick={e => { e.stopPropagation(); downloadUrl(src) }}
+          title="Сохранить"
+          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        >
+          <IconDownload size={17} stroke={1.8} />
+        </button>
+        <button
+          onClick={close}
+          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        >
+          <IconX size={18} stroke={2} />
+        </button>
+      </div>
 
       <div className="px-4 w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
         <video
