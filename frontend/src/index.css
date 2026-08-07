@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+/* Шрифт лежит рядом с приложением, а не тянется с fonts.googleapis.com.
+   Так строгая CSP (style-src 'self') остаётся строгой, браузер каждого
+   пользователя не сообщает Google о заходе на закрытый мессенджер, и
+   надпись не «прыгает» с запасного шрифта на настоящий.
+   Вариативная версия — один файл на все начертания от 200 до 1000. */
+@import '@fontsource-variable/nunito/wght.css';
 
 @tailwind base;
 @tailwind components;
@@ -52,7 +57,7 @@
   #root {
     padding-top: max(env(safe-area-inset-top, 0px), var(--status-bar-height, 0px));
   }
-  body { font-family: 'Nunito', system-ui, sans-serif; font-weight: 500; background: var(--bg); color: var(--text); transition: background .35s ease, color .35s ease; }
+  body { font-family: 'Nunito Variable', 'Nunito', system-ui, sans-serif; font-weight: 500; background: var(--bg); color: var(--text); transition: background .35s ease, color .35s ease; }
   button, input, textarea { font-family: inherit; }
   /* Предотвращаем авто-зум iOS Safari при фокусе на инпутах (срабатывает при font-size < 16px) */
   @media (max-width: 768px) {

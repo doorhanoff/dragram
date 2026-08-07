@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Nunito', 'system-ui', 'sans-serif'],
+        sans: ['Nunito Variable', 'Nunito', 'system-ui', 'sans-serif'],
       },
       colors: {
         accent:   { DEFAULT: 'var(--accent)', light: 'var(--surface2)', text: 'var(--accent2)' },
