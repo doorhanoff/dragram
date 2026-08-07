@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Всё, что отдаёт данные. Проверяется по началу пути, поэтому вложенные
 # маршруты (/chats/ws/{id}) закрыты автоматически.
 PROTECTED_PREFIXES = (
-    "/auth", "/chats", "/posts", "/albums", "/notifications", "/media",
+    "/auth", "/chats", "/posts", "/albums", "/notifications", "/media", "/contacts",
 )
 
 GATE_COOKIE = "gate"

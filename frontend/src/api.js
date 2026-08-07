@@ -186,6 +186,10 @@ export const api = {
     return data
   },
 
+  /** Хеши номеров из телефонной книги → найденные знакомые и чаты с ними.
+   *  Сами номера наружу не уходят, см. nativeContacts.ts. */
+  discoverContacts: (hashes) => req('POST', '/contacts/discover', { hashes }),
+
   /** Нужна ли дверь и пройдена ли она. */
   gateStatus: () => req('GET', '/gate/status'),
 

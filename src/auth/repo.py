@@ -69,6 +69,14 @@ class AuthRepository(BaseRepository):
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(values)
         await self.session.execute(stmt)
 
+    async def list_phones(self) -> list[tuple[uuid.UUID, str, str, str | None]]:
+        """Все пользователи с номерами — для сверки с телефонной книгой.
+        Номера не покидают сервер: наружу уходят только совпадения."""
+        res = await self.session.execute(
+            select(UsersOrm.id, UsersOrm.phone_number, UsersOrm.name, UsersOrm.image_url)
+        )
+        return [tuple(row) for row in res.all()]
+
     async def get_avatar_url(self, user_id: uuid.UUID) -> str | None:
         stmt = select(UsersOrm.image_url).where(UsersOrm.id == user_id)
         result = await self.session.execute(stmt)

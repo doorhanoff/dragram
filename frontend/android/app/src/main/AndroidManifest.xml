@@ -98,6 +98,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Поиск знакомых по телефонной книге. Номера не уходят на сервер в
+         открытом виде — только их хеши, см. src/contacts/service.py. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Сохранение файлов из чата и альбомов в «Загрузки». Начиная с Android 10
          запись идёт через MediaStore и разрешение не нужно, поэтому оно

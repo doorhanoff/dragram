@@ -6,6 +6,8 @@ import {
   encryptMessage, decryptMessage, encryptKeyBackup, decryptKeyBackup, checkPeerKey,
 } from './crypto'
 import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
+import { canReadContacts, collectContactHashes } from './nativeContacts'
+import { showToast } from './utils'
 
 import Auth              from './components/Auth'
 import Gate              from './components/Gate'
@@ -343,6 +345,48 @@ export default function App() {
       syncNames(names)
     } catch {}
   }, [])
+
+  /**
+   * Ищет знакомых по телефонной книге и сразу заводит с ними чаты.
+   *
+   * Наружу уходят только хеши номеров: адресная книга — это данные людей,
+   * которые про Dragram ничего не знают и согласия не давали. Разрешение
+   * спрашивается системным окном; отказ ничего не ломает и больше не
+   * донимает — повторить можно кнопкой в своём профиле.
+   */
+  const syncContacts = useCallback(async (silent = true) => {
+    if (!canReadContacts()) return
+    try {
+      const hashes = await collectContactHashes()
+      if (!hashes) {
+        if (!silent) showToast('Доступ к контактам не разрешён')
+        return
+      }
+      localStorage.setItem('contacts_synced', '1')
+      if (!hashes.length) {
+        if (!silent) showToast('В телефонной книге нет подходящих номеров')
+        return
+      }
+      const { matched } = await api.discoverContacts(hashes)
+      if (matched.length) {
+        await loadChats()
+        showToast(`Знакомых найдено: ${matched.length}`)
+      } else if (!silent) {
+        showToast('Из ваших контактов пока никого нет в Dragram')
+      }
+    } catch (e: any) {
+      if (!silent) showToast('Не удалось синхронизировать контакты')
+      console.warn('Синхронизация контактов не удалась:', e)
+    }
+  }, [loadChats])
+
+  // При первом входе — сразу ищем знакомых и заводим с ними чаты. Дальше
+  // только по кнопке: молча перечитывать телефонную книгу каждый запуск
+  // ни к чему.
+  useEffect(() => {
+    if (!user || localStorage.getItem('contacts_synced')) return
+    syncContacts(true)
+  }, [user, syncContacts])
 
   // Периодически обновляем список чатов, чтобы счётчики непрочитанных были актуальны
   useEffect(() => {
@@ -726,6 +770,7 @@ export default function App() {
           onClose={() => setShowMyProfile(false)}
           onLogout={() => { setShowMyProfile(false); logout() }}
           onRotateKeys={rotateKeys}
+          onSyncContacts={canReadContacts() ? () => syncContacts(false) : undefined}
         />
       )}
 

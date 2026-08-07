@@ -12,9 +12,12 @@ interface Props {
   onLogout: () => void
   /** Смена ключевой пары E2EE — сама операция живёт в App, где хранятся ключи. */
   onRotateKeys: (password: string) => Promise<void>
+  /** Повторный поиск знакомых по телефонной книге. Только в приложении:
+   *  в браузере доступа к контактам нет, и кнопка не показывается. */
+  onSyncContacts?: () => Promise<void>
 }
 
-export default function MyProfileModal({ userId, onClose, onLogout, onRotateKeys }: Props) {
+export default function MyProfileModal({ userId, onClose, onLogout, onRotateKeys, onSyncContacts }: Props) {
   const [user,    setUser]    = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -27,6 +30,7 @@ export default function MyProfileModal({ userId, onClose, onLogout, onRotateKeys
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [rotating, setRotating] = useState(false)
   const [rotatePassword, setRotatePassword] = useState('')
   const [rotateError, setRotateError] = useState('')
@@ -250,6 +254,15 @@ export default function MyProfileModal({ userId, onClose, onLogout, onRotateKeys
                   <IconLogout size={16} stroke={1.5} />
                   Выйти из аккаунта
                 </button>
+                {onSyncContacts && (
+                  <button
+                    onClick={async () => { setSyncing(true); try { await onSyncContacts() } finally { setSyncing(false) } }}
+                    disabled={syncing}
+                    className="w-full text-center text-xs text-muted py-1 hover:text-accent transition-colors disabled:opacity-50"
+                  >
+                    {syncing ? 'Ищем знакомых…' : 'Найти знакомых по контактам'}
+                  </button>
+                )}
                 <button
                   onClick={() => setRotating(true)}
                   className="w-full text-center text-xs text-muted py-1 hover:text-accent transition-colors"

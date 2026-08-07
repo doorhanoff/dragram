@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppIconPlugin.class);
         registerPlugin(E2eeKeysPlugin.class);
         registerPlugin(DownloadPlugin.class);
+        registerPlugin(ContactsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
