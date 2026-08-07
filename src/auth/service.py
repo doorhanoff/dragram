@@ -253,9 +253,16 @@ class AuthService:
         await self.repo.commit()
 
     async def upload_avatar(self, user_id: uuid.UUID, file, s3) -> str:
+        previous = await self.repo.get_avatar_url(user_id)
         url = await s3.upload_file(file.file, file.content_type)
         await self.repo.update_avatar(user_id, url)
         await self.repo.commit()
+        # Старый аватар удаляем только после коммита: сорвись запись в БД
+        # раньше — пользователь остался бы со ссылкой на удалённый файл.
+        # Само удаление best-effort, как и в delete_file: не смогли — в лог,
+        # но смену аватара это ломать не должно.
+        if previous and previous != url:
+            await s3.delete_file(previous)
         return url
 
     async def set_public_key(self, user_id: uuid.UUID, public_key: str) -> None:

@@ -93,12 +93,18 @@ class ChatsService:
         return chat
 
     async def upload_photo_for_chat(self, chat_id: uuid.UUID, photo: UploadFile, user: UsersOrm) -> ChatsOrm:
-        await self._get_chat_for_member(chat_id, user)
+        chat = await self._get_chat_for_member(chat_id, user)
         if photo.content_type not in ALLOWED_IMAGE_TYPES:
             raise InvalidFileType
+        previous = chat.image_url
         image_url = await self.s3.upload_file(photo.file, photo.content_type)
         updated = await self.repo.update_chat_image(chat_id, image_url)
         await self.repo.commit()
+        # Прежнюю картинку чата убираем после коммита — как и старый аватар:
+        # иначе каждая смена оставляла бы в хранилище файл, на который уже
+        # никто не ссылается, и за него молча капала бы оплата.
+        if previous and previous != image_url:
+            await self.s3.delete_file(previous)
         return updated
 
     async def get_by_id(self, item_id: uuid.UUID) -> ChatsOrm | None:
@@ -274,6 +280,10 @@ class ChatsService:
             return None
         if deleted.type in ("image", "video", "audio"):
             await self.s3.delete_file(deleted.text)
+            # Превью видео — отдельный объект в хранилище. Без этой строки
+            # каждое удалённое видео оставляло после себя картинку-сироту.
+            if deleted.thumbnail_url:
+                await self.s3.delete_file(deleted.thumbnail_url)
         event = DeleteEvent(message_id=message_id)
         await self.redis.publish(f"chat:{chat_id}", event.model_dump_json())
         return event

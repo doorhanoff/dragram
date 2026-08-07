@@ -69,8 +69,12 @@ class AuthRepository(BaseRepository):
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(values)
         await self.session.execute(stmt)
 
+    async def get_avatar_url(self, user_id: uuid.UUID) -> str | None:
+        stmt = select(UsersOrm.image_url).where(UsersOrm.id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def update_avatar(self, user_id: uuid.UUID, image_url: str) -> None:
-        from sqlalchemy import update
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(image_url=image_url)
         await self.session.execute(stmt)
 
