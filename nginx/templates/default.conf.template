@@ -51,13 +51,10 @@ server {
     ssl_session_timeout 1d;
     ssl_session_tickets off;
 
-    # OCSP stapling: браузеру не приходится самому ходить к УЦ за статусом
-    # сертификата — быстрее и не «светит» посещение сайта третьей стороне.
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
-    resolver 127.0.0.11 valid=300s;
-    resolver_timeout 5s;
+    # OCSP stapling намеренно не включаем: Let's Encrypt отключил OCSP-ответчики,
+    # в сертификатах больше нет их адреса, и nginx на каждый старт писал бы
+    # «ssl_stapling ignored, no OCSP responder URL». Отзыв сертификатов у них
+    # теперь выражается через короткий срок жизни, а не через OCSP.
 
     # Максимальный размер загружаемого файла. Согласован с лимитами в
     # src/chats/service.py: 200 МБ на видео — самый большой из них.
