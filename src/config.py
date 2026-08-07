@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     # Firebase Cloud Messaging (push-уведомления)
     FCM_CREDENTIALS_JSON: str = ""
 
+    # ── Дверь перед сайтом ────────────────────────────────────────────────
+    # Прежде чем показать вход, сайт спрашивает два ответа. Хранятся только
+    # Argon2-хеши: из .env, из образа и из репозитория сами ответы получить
+    # нельзя. Пусты — дверь выключена (иначе опечатка в конфиге закрыла бы
+    # сайт вообще для всех, включая владельца).
+    GATE_BIRTHDAY_HASH: str = ""
+    GATE_CREATOR_HASH: str = ""
+    # Сколько дней помнить пройденную дверь, чтобы не спрашивать каждый раз.
+    GATE_TTL_DAYS: int = 30
+
     # Боевой домен. Пусто при локальной разработке; на сервере задаётся в .env
     # и попадает в список разрешённых CORS-origin'ов.
     DOMAIN: str = ""
@@ -86,6 +96,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return bool(self.DOMAIN) and not self.DEBUG
+
+    @property
+    def gate_enabled(self) -> bool:
+        return bool(self.GATE_BIRTHDAY_HASH and self.GATE_CREATOR_HASH)
 
     @property
     def cors_origins(self) -> list[str]:

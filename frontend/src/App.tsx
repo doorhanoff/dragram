@@ -8,6 +8,7 @@ import {
 import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 
 import Auth              from './components/Auth'
+import Gate              from './components/Gate'
 import Sidebar           from './components/layout/Sidebar'
 import BottomNav         from './components/layout/BottomNav'
 import ChatList          from './components/chat/ChatList'
@@ -89,6 +90,8 @@ export default function App() {
   const { dark } = useTheme()
   const [user,          setUser]          = useState<User | null>(null)
   const [loading,       setLoading]       = useState(true)
+  // null — ещё не спрашивали сервер; false — дверь закрыта
+  const [gateOk,        setGateOk]        = useState<boolean | null>(null)
   const [chats,         setChats]         = useState<Chat[]>([])
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [messages,      setMessages]      = useState<Record<string, Message[]>>({})
@@ -284,18 +287,35 @@ export default function App() {
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
+  const loadSession = useCallback(async () => {
+    try {
+      const u: User = await api.getMe()
+      // Тикет на медиа берём до первой отрисовки: без него ссылки на
+      // картинки не подписаны, и хранилище их не отдаст.
+      await api.ensureMediaTicket().catch(() => {})
+      setUser(u); userIdRef.current = u.id
+      await setupCrypto(u.id, null)
+      loadChats()
+    } catch {
+      // Не вошли — покажется форма входа
+    }
+  }, [])
+
   useEffect(() => {
-    api.getMe()
-      .then(async (u: User) => {
-        // Тикет на медиа берём до первой отрисовки: без него ссылки на
-        // картинки не подписаны, и хранилище их не отдаст.
-        await api.ensureMediaTicket().catch(() => {})
-        setUser(u); userIdRef.current = u.id
-        await setupCrypto(u.id, null)
-        loadChats()
+    api.gateStatus()
+      .then(async (s: { unlocked: boolean }) => {
+        setGateOk(s.unlocked)
+        if (s.unlocked) await loadSession()
       })
       .catch(() => {})
       .finally(() => setLoading(false))
+  }, [loadSession])
+
+  // Пропуск протух прямо во время работы — возвращаемся к двери.
+  useEffect(() => {
+    const h = () => setGateOk(false)
+    window.addEventListener('gate:required', h)
+    return () => window.removeEventListener('gate:required', h)
   }, [])
 
   // Тикет живёт час — обновляем его, пока приложение открыто.
@@ -598,6 +618,9 @@ export default function App() {
       <div className="w-2 h-2 rounded-full bg-accent animate-bounce" />
     </div>
   )
+  // Дверь стоит перед формой входа: пока ответы не даны, приложение не
+  // показывает даже её. Настоящая проверка — на сервере, здесь только экран.
+  if (gateOk === false) return <Gate onUnlocked={() => { setGateOk(true); loadSession() }} />
   if (!user) return <Auth onLogin={handleLogin} />
 
   const chatPanel = (

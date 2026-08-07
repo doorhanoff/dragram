@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import router
 from src.config import settings
+from src.gate.middleware import GateMiddleware
+from src.gate.service import make_gate_service
 from src.redis.redis_service import init_redis, close_redis
 
 
@@ -28,6 +30,12 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
+
+# Дверь добавляется ПОСЛЕ CORS: middleware в Starlette выполняются в обратном
+# порядке добавления, а значит CORS отработает первым и браузер увидит
+# заголовки даже на ответе «нужен пропуск» — иначе фронтенд получил бы
+# невнятную сетевую ошибку вместо 403.
+app.add_middleware(GateMiddleware, service=make_gate_service())
 
 app.add_middleware(
     CORSMiddleware,

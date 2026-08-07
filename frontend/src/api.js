@@ -59,6 +59,22 @@ export function mediaSrc(url) {
   return `${BASE}/media/${key}${query}`
 }
 
+// ── Дверь перед сайтом ─────────────────────────────────────────────────────
+// Здесь только хранение пропуска. Сами ответы и их проверка живут на сервере:
+// проверяй их фронтенд — они лежали бы в бандле и открывались через
+// «посмотреть код».
+let _gateToken = localStorage.getItem('gate_token')
+
+function saveGateToken(token) {
+  _gateToken = token
+  if (token) localStorage.setItem('gate_token', token)
+}
+
+function clearGateToken() {
+  _gateToken = null
+  localStorage.removeItem('gate_token')
+}
+
 let _refreshing = false
 let _refreshQueue = []
 
@@ -104,6 +120,12 @@ async function req(method, path, body, isForm = false) {
     if (token) opts.headers['Authorization'] = `Bearer ${token}`
   }
 
+  // Пропуск от двери. В вебе его же присылает кука, но заголовок нужен
+  // мобильному клиенту: в Capacitor запросы кросс-доменные и кук нет.
+  if (_gateToken) {
+    opts.headers = { ...(opts.headers || {}), 'X-Gate-Token': _gateToken }
+  }
+
   if (body && !isForm) {
     opts.headers = { ...(opts.headers || {}), 'Content-Type': 'application/json' }
     opts.body = JSON.stringify(body)
@@ -129,6 +151,11 @@ async function req(method, path, body, isForm = false) {
 
   if (!res.ok) {
     const e = await res.json().catch(() => ({}))
+    if (res.status === 403 && e.detail === 'gate_required') {
+      // Пропуск протух или его не было — приложение показывает дверь снова.
+      clearGateToken()
+      window.dispatchEvent(new Event('gate:required'))
+    }
     throw new Error(e.detail || String(res.status))
   }
   const text = await res.text()
@@ -151,6 +178,16 @@ export const api = {
     const data = await req('POST', '/auth/logout', body).catch(() => null)
     clearTokens()
     clearMediaTicket()
+    return data
+  },
+
+  /** Нужна ли дверь и пройдена ли она. */
+  gateStatus: () => req('GET', '/gate/status'),
+
+  /** Проверка ответов целиком на сервере; сюда возвращается только пропуск. */
+  gateUnlock: async (birthday, creator) => {
+    const data = await req('POST', '/gate/unlock', { birthday, creator })
+    saveGateToken(data?.token)
     return data
   },
 

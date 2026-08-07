@@ -5,6 +5,7 @@ from .posts.router import router as posts_router
 from .albums.router import router as albums_router
 from .notifications.router import router as notifications_router
 from .media.router import router as media_router
+from .gate.router import router as gate_router
 
 router = APIRouter()
 router.include_router(auth_router)
@@ -13,3 +14,4 @@ router.include_router(posts_router)
 router.include_router(albums_router)
 router.include_router(notifications_router)
 router.include_router(media_router)
+router.include_router(gate_router)
