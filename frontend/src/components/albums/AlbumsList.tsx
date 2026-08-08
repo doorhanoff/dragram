@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react'
 import { IconPlus, IconAlbum, IconX } from '@tabler/icons-react'
 import { api } from '../../api'
 import type { Album } from '../../types'
+import { parseDate } from '../../utils'
 
 const SEASONS = ['Зима', 'Зима', 'Весна', 'Весна', 'Весна', 'Лето', 'Лето', 'Лето', 'Осень', 'Осень', 'Осень', 'Зима']
 
 function seasonAndYear(dt: string) {
-  const d = new Date(dt)
+  const d = parseDate(dt)
+  if (!d) return ''
   const season = SEASONS[d.getMonth()]
   return `${season} ${d.getFullYear()}`
 }

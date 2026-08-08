@@ -6,7 +6,7 @@ import {
 import { api, mediaSrc } from '../../api'
 import Avatar from '../ui/Avatar'
 import AddMemberModal from './AddMemberModal'
-import { downloadUrl, showToast } from '../../utils'
+import { downloadUrl, showToast, parseDate } from '../../utils'
 import { useBackHandler } from '../../hooks/useBackHandler'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
@@ -15,11 +15,11 @@ function isVideo(link: string) {
 }
 
 function dayKey(dt: string) {
-  return new Date(dt).toDateString()
+  return parseDate(dt)?.toDateString() ?? ''
 }
 
 function fmtDay(dt: string) {
-  return new Date(dt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })
+  return parseDate(dt)?.toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) ?? ''
 }
 
 function groupByDay(materials: AlbumMaterial[]) {

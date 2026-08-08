@@ -2,7 +2,7 @@ import uuid
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, func, ForeignKey, Table, Column, Uuid
+from sqlalchemy import DateTime, String, Text, func, ForeignKey, Table, Column, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.database import Base
 
@@ -31,7 +31,7 @@ class MessagesOrm(Base):
     sender_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     is_read: Mapped[bool] = mapped_column(default=False)
 
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chat:   Mapped["ChatsOrm"] = relationship("ChatsOrm", back_populates="messages")
     sender: Mapped["UsersOrm"] = relationship("UsersOrm", foreign_keys=[sender_id], lazy="selectin")
@@ -46,7 +46,7 @@ class ChatsOrm(Base):
     name: Mapped[str] = mapped_column(Text, nullable=True)
     image_url: Mapped[str] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # noload: история может быть сколь угодно большой, грузить её целиком
     # при каждом обращении к чату нельзя. Сообщения отдаёт только

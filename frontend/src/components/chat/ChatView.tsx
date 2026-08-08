@@ -3,6 +3,7 @@ import {
   IconPaperclip,
   IconSend, IconMicrophone, IconPlayerStop, IconArrowLeft, IconChevronUp,
 } from '@tabler/icons-react'
+import { parseDate } from '../../utils'
 import MessageBubble from './MessageBubble'
 import Avatar from '../ui/Avatar'
 import type { Member } from '../../types'
@@ -18,7 +19,8 @@ function chatName(chat: Chat, myId: string): string {
 
 function fmtDay(dt?: string): string {
   if (!dt) return ''
-  const d = new Date(dt)
+  const d = parseDate(dt)
+  if (!d) return ''
   if (isNaN(d.getTime())) return ''
   const today = new Date()
   const yest  = new Date(); yest.setDate(yest.getDate() - 1)

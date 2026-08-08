@@ -5,6 +5,7 @@ import ProfileModal from '../ui/ProfileModal'
 import GroupChatModal from './GroupChatModal'
 import type { Chat, User } from '../../types'
 import { api } from '../../api'
+import { parseDate } from '../../utils'
 
 function chatName(chat: Chat, myId: string): string {
   if (chat.name) return chat.name
@@ -14,7 +15,8 @@ function chatName(chat: Chat, myId: string): string {
 
 function fmtTime(dt?: string): string {
   if (!dt) return ''
-  const d = new Date(dt)
+  const d = parseDate(dt)
+  if (!d) return ''
   if (isNaN(d.getTime())) return ''
   return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
 }

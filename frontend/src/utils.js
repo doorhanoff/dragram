@@ -25,16 +25,32 @@ export function chatName(chat, myId) {
   return `Чат ${String(chat?.id || '').slice(0, 6)}`
 }
 
+/**
+ * Разбирает дату с сервера.
+ *
+ * Строку без указания пояса («2026-08-08T15:19:18») браузер считает МЕСТНЫМ
+ * временем. База отдавала именно такие — значения в ней UTC, а колонка про
+ * это не знала, — и в Москве сообщения показывались на три часа раньше, чем
+ * были отправлены. Сама причина устранена (колонки переведены в timestamptz),
+ * но разбор оставляем устойчивым: смещение дописывается, только если его нет,
+ * поэтому корректную дату функция не портит.
+ */
+export function parseDate(dt) {
+  if (!dt) return null
+  const s = String(dt)
+  const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
+  const d = new Date(hasZone || !s.includes('T') ? s : s + 'Z')
+  return isNaN(d.getTime()) ? null : d
+}
+
 export function fmtTime(dt) {
-  if (!dt) return ''
-  const d = new Date(dt)
-  return isNaN(d) ? '' : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+  const d = parseDate(dt)
+  return d ? d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
 export function fmtDay(dt) {
-  if (!dt) return ''
-  const d = new Date(dt)
-  if (isNaN(d)) return ''
+  const d = parseDate(dt)
+  if (!d) return ''
   const today = new Date()
   const yest  = new Date(); yest.setDate(yest.getDate() - 1)
   if (d.toDateString() === today.toDateString()) return 'Сегодня'

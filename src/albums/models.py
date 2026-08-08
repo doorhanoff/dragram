@@ -2,7 +2,7 @@ import uuid
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, func, ForeignKey, Table, Column, Uuid
+from sqlalchemy import DateTime, String, Text, func, ForeignKey, Table, Column, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.database import Base
 
@@ -25,7 +25,7 @@ class AlbumsOrm(Base):
 
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     creator: Mapped["UsersOrm"] = relationship("UsersOrm", foreign_keys=[creator_id], lazy="selectin")
     members: Mapped[list["UsersOrm"]] = relationship("UsersOrm", secondary=album_members, lazy="selectin")
@@ -43,6 +43,6 @@ class AlbumMaterialsOrm(Base):
     album_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("albums.id", ondelete="CASCADE"), nullable=False)
     published_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     published_by: Mapped["UsersOrm"] = relationship("UsersOrm", lazy="selectin")
-    published_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    published_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     album: Mapped["AlbumsOrm"] = relationship("AlbumsOrm", back_populates="materials")

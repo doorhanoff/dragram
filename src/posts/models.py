@@ -2,7 +2,7 @@ import uuid
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, func, ForeignKey, Table, Column, Uuid
+from sqlalchemy import DateTime, String, Text, func, ForeignKey, Table, Column, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.database import Base
 
@@ -45,7 +45,7 @@ class CommentsOrm(Base):
         "CommentsOrm", remote_side="CommentsOrm.id", foreign_keys=[reply_to_id], lazy="selectin"
     )
 
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PostsOrm(Base):
@@ -75,4 +75,4 @@ class PostsOrm(Base):
         "UsersOrm", secondary=post_bookmarks, lazy="noload"
     )
 
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

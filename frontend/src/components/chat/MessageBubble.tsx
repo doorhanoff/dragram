@@ -6,11 +6,11 @@ import VideoLightbox from '../ui/VideoLightbox'
 import VideoThumb from '../ui/VideoThumb'
 import ForwardModal from './ForwardModal'
 import { api, mediaSrc } from '../../api'
+import { parseDate } from '../../utils'
 
 function fmtTime(dt?: string): string {
-  if (!dt) return ''
-  const d = new Date(dt)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+  const d = parseDate(dt)
+  return d ? d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
 // Одна галочка — отправлено, две — прочитано

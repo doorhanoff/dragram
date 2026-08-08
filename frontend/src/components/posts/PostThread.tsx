@@ -4,10 +4,12 @@ import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import type { Post, Comment } from '../../types'
 import { api, mediaSrc } from '../../api'
+import { parseDate } from '../../utils'
 
 function fmtTime(dt?: string) {
   if (!dt) return ''
-  const d = new Date(dt)
+  const d = parseDate(dt)
+  if (!d) return ''
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
 }
 

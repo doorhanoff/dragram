@@ -5,9 +5,12 @@ import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import type { Post } from '../../types'
 import { api, mediaSrc } from '../../api'
+import { parseDate } from '../../utils'
 
 function fmtAgo(dt: string): string {
-  const diff = Date.now() - new Date(dt).getTime()
+  const parsed = parseDate(dt)
+  if (!parsed) return ''
+  const diff = Date.now() - parsed.getTime()
   const m = Math.floor(diff / 60000)
   if (m < 1) return 'только что'
   if (m < 60) return `${m} мин.`

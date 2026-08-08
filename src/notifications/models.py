@@ -1,7 +1,7 @@
 import uuid
 import datetime
 
-from sqlalchemy import String, Text, func, ForeignKey
+from sqlalchemy import DateTime, String, Text, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from src.db.database import Base
 
@@ -15,4 +15,4 @@ class DeviceTokenOrm(Base):
     token:    Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     platform: Mapped[str] = mapped_column(String(20), nullable=False, default="android", server_default="android")
 
-    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
