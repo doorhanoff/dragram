@@ -197,7 +197,6 @@ export default function ChatList({ user, chats, activeChatId, onOpenChat, onStar
       {profileId && (
         <ProfileModal
           userId={profileId}
-          myId={user.id}
           isMe={profileId === user.id}
           onClose={() => setProfileId(null)}
           onStartChat={uid => { onStartChat(uid); setProfileId(null) }}

@@ -1,60 +1,25 @@
 import React, { useEffect, useState } from 'react'
-import { IconX, IconMessage2, IconPhone, IconAlignLeft, IconShieldLock, IconAlertTriangle } from '@tabler/icons-react'
+import { IconX, IconMessage2, IconPhone, IconAlignLeft } from '@tabler/icons-react'
 import Avatar from './Avatar'
 import { api } from '../../api'
-import { computeSafetyNumber, myPublicKeyBase64, checkPeerKey, trustPeerKey } from '../../crypto'
 import { useBackHandler } from '../../hooks/useBackHandler'
 
 interface Props {
   userId: string
-  myId?: string
   isMe?: boolean
   onClose: () => void
   onStartChat?: (userId: string) => void
 }
 
-export default function ProfileModal({ userId, myId, isMe, onClose, onStartChat }: Props) {
+export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Props) {
   const [user,    setUser]    = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  // Safety number: чтобы убедиться, что переписку шифруют именно вашим ключом,
-  // а не подставленным сервером, номера сверяют вживую — они должны совпасть.
-  const [safety,  setSafety]  = useState<string | null>(null)
-  const [keyChanged, setKeyChanged] = useState(false)
-  const [showSafety, setShowSafety] = useState(false)
 
   useBackHandler(onClose)
 
   useEffect(() => {
     api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))
   }, [userId])
-
-  useEffect(() => {
-    if (isMe || !myId || myId === userId) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [mine, theirs] = await Promise.all([
-          myPublicKeyBase64(myId),
-          api.getUserPublicKey(userId).then((r: any) => r.public_key),
-        ])
-        if (cancelled || !mine || !theirs) return
-        setSafety(await computeSafetyNumber(mine, theirs))
-        setKeyChanged((await checkPeerKey(myId, userId, theirs)) === 'changed')
-      } catch {
-        // У собеседника может не быть ключа (не заходил после введения E2EE) —
-        // это не ошибка, просто сверять нечего.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [userId, myId, isMe])
-
-  async function acceptNewKey() {
-    try {
-      const { public_key } = await api.getUserPublicKey(userId)
-      await trustPeerKey(myId!, userId, public_key)
-      setKeyChanged(false)
-    } catch {}
-  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
@@ -102,50 +67,6 @@ export default function ProfileModal({ userId, myId, isMe, onClose, onStartChat 
                 </div>
               )}
             </div>
-
-            {/* Шифрование */}
-            {safety && (
-              <div className="border-t border-border">
-                {keyChanged && (
-                  <div className="flex items-start gap-3 px-5 py-3 bg-amber-500/10">
-                    <IconAlertTriangle size={15} stroke={1.5} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-md text-primary font-bold">Ключ собеседника изменился</div>
-                      <div className="text-xs text-muted mt-0.5">
-                        Обычно это смена устройства или переустановка приложения. Но так же
-                        выглядит и попытка подменить ключ — сверьте номер безопасности лично,
-                        прежде чем продолжать.
-                      </div>
-                      <button onClick={acceptNewKey}
-                        className="mt-2 text-xs font-bold text-accent hover:opacity-80">
-                        Я сверил(а) — доверять новому ключу
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => setShowSafety(v => !v)}
-                  className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-bg">
-                  <IconShieldLock size={15} stroke={1.5} className="text-muted flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-xs text-muted mb-0.5">Номер безопасности</div>
-                    <div className="text-md text-primary">
-                      {showSafety ? 'Скрыть' : 'Показать и сверить'}
-                    </div>
-                  </div>
-                </button>
-                {showSafety && (
-                  <div className="px-5 pb-4">
-                    <div className="font-mono text-sm text-primary leading-6 tracking-wide break-all select-all">
-                      {safety}
-                    </div>
-                    <div className="text-xs text-muted mt-2">
-                      Откройте этот же экран у собеседника. Если числа совпадают, переписку
-                      читаете только вы двое.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Action */}
             {!isMe && onStartChat && (

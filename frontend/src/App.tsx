@@ -209,37 +209,6 @@ export default function App() {
     return kp
   }
 
-  /**
-   * Смена ключевой пары E2EE — если прежний ключ скомпрометирован или забыт
-   * пароль от бэкапа. Раньше ключ записывался на сервере ровно один раз, и
-   * сменить его можно было только правкой базы.
-   *
-   * Цена операции: переписка, зашифрованная старым ключом, не расшифруется
-   * ни у вас, ни у собеседников. Личные чаты продолжат работать сразу (общий
-   * ключ выводится из ключей обеих сторон), групповые — когда любой участник
-   * откроет чат и выдаст вам ключ заново.
-   */
-  const rotateKeys = useCallback(async (password: string) => {
-    const userId = userIdRef.current
-    if (!userId) throw new Error('Не загружен профиль')
-
-    const { privateKey, publicKey, jwk } = await generateKeypairFull()
-    const pub = await exportPublicKey(publicKey)
-    const backup = await encryptKeyBackup(jwk, password)
-
-    // Сначала сервер: если он откажет (неверный пароль), локальные ключи
-    // должны остаться прежними, иначе доступ к переписке потеряется зря.
-    await api.rotateKeys(password, pub, backup)
-
-    await storeKeypair(userId, { privateKey, publicKey })
-    keyPairRef.current = { privateKey, publicKey }
-    myPubKeyRef.current = pub
-    chatKeysRef.current.clear()
-    loadedChats.current.clear()
-    clearNativeKeys()
-    setMessages({})
-  }, [])
-
   async function setupCrypto(userId: string, password: string | null, isNewAccount = false) {
     try {
       if (isNewAccount) {
@@ -769,7 +738,6 @@ export default function App() {
           userId={user.id}
           onClose={() => setShowMyProfile(false)}
           onLogout={() => { setShowMyProfile(false); logout() }}
-          onRotateKeys={rotateKeys}
           onSyncContacts={canReadContacts() ? () => syncContacts(false) : undefined}
         />
       )}

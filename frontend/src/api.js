@@ -229,11 +229,6 @@ export const api = {
   setChatKeys:     (id, keys)      => req('POST', `/chats/${id}/keys`, { keys }),
   getMyChatKey:    (id)            => req('GET',  `/chats/${id}/keys/me`),
   getMembersWithoutKeys: (id)      => req('GET',  `/chats/${id}/keys/missing`),
-  /** Смена ключевой пары E2EE. Переписка старым ключом станет нечитаемой. */
-  rotateKeys: (password, publicKey, keyBackup) =>
-    req('POST', '/auth/me/keys/rotate', {
-      password, public_key: publicKey, key_backup: keyBackup,
-    }),
   updateProfile:   (data)          => req('PATCH', '/auth/me', data),
   /** Удаление аккаунта со всеми данными. Подтверждается паролем. */
   deleteAccount: async (password) => {

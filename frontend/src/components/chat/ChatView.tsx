@@ -357,7 +357,6 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       {profileId && (
         <ProfileModal
           userId={profileId}
-          myId={userId}
           isMe={profileId === userId}
           onClose={() => setProfileId(null)}
           onStartChat={onStartChat}
