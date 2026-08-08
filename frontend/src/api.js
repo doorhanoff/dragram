@@ -260,6 +260,8 @@ export const api = {
       } else {
         xhr.withCredentials = true
       }
+      // Пропуск от двери: в вебе его донесёт кука, в приложении кук нет.
+      if (_gateToken) xhr.setRequestHeader('X-Gate-Token', _gateToken)
       if (onProgress) {
         xhr.upload.onprogress = e => {
           if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100))
@@ -290,6 +292,8 @@ export const api = {
       } else {
         xhr.withCredentials = true
       }
+      // Пропуск от двери: в вебе его донесёт кука, в приложении кук нет.
+      if (_gateToken) xhr.setRequestHeader('X-Gate-Token', _gateToken)
       if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)) }
       xhr.onload  = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(String(xhr.status)))
       xhr.onerror = () => reject(new Error('Ошибка сети'))
@@ -320,6 +324,8 @@ export const api = {
       } else {
         xhr.withCredentials = true
       }
+      // Пропуск от двери: в вебе его донесёт кука, в приложении кук нет.
+      if (_gateToken) xhr.setRequestHeader('X-Gate-Token', _gateToken)
       if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)) }
       xhr.onload  = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(String(xhr.status)))
       xhr.onerror = () => reject(new Error('Ошибка сети'))

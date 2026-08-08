@@ -18,10 +18,21 @@ from .service import GateService
 logger = logging.getLogger(__name__)
 
 # Всё, что отдаёт данные. Проверяется по началу пути, поэтому вложенные
-# маршруты (/chats/ws/{id}) закрыты автоматически.
+# маршруты закрыты автоматически.
 PROTECTED_PREFIXES = (
     "/auth", "/chats", "/posts", "/albums", "/notifications", "/media", "/contacts",
 )
+
+# Исключения: сюда пропуск не донести технически.
+#
+# Браузерный WebSocket не умеет задавать заголовки, а `<img src>` — тем более;
+# на мобильном клиенте кук нет вовсе (запросы кросс-доменные), поэтому дверь
+# отсекала и чат, и картинки — на сайте всё работало, а в приложении нет.
+#
+# Дыры это не открывает: оба пути требуют собственный короткоживущий тикет
+# (ws-тикет на 30 секунд, медиа-тикет на час), а выдаются они только
+# ручками, которые сами стоят за дверью и требуют входа в аккаунт.
+TICKETED_PREFIXES = ("/chats/ws/", "/media/")
 
 GATE_COOKIE = "gate"
 GATE_HEADER = b"x-gate-token"
@@ -38,6 +49,9 @@ class GateMiddleware:
             return
 
         path = scope.get("path", "")
+        if path.startswith(TICKETED_PREFIXES):
+            await self.app(scope, receive, send)
+            return
         if not path.startswith(PROTECTED_PREFIXES) or self._has_pass(scope):
             await self.app(scope, receive, send)
             return
