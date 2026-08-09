@@ -80,6 +80,20 @@ export function gateHeaders() {
   return _gateToken ? { 'X-Gate-Token': _gateToken } : {}
 }
 
+/** Связь оборвалась — сервер ничего не ответил. Сессия при этом цела. */
+class NetworkError extends Error {}
+/** Нужен пропуск от двери. Сессия тоже цела — разлогинивать нельзя. */
+class GateError extends Error {}
+
+/** fetch, у которого обрыв связи отличим от ответа сервера. */
+async function fetchOrThrow(url, opts) {
+  try {
+    return await fetch(url, opts)
+  } catch (e) {
+    throw new NetworkError(e?.message || 'network')
+  }
+}
+
 let _refreshing = false
 let _refreshQueue = []
 
@@ -90,17 +104,30 @@ async function tryRefresh() {
   _refreshing = true
   try {
     let res
+    // Пропуск от двери обязателен и здесь. Раньше этот запрос собирался
+    // отдельно от req() и заголовок терял: в вебе его доносила кука, а на
+    // телефоне кук нет — и каждое обновление токена упиралось в дверь,
+    // возвращало 403, и приложение считало это протухшей сессией. Выглядело
+    // как «раз в 15 минут выкидывает на экран входа».
+    const headers = { ...gateHeaders() }
     if (IS_NATIVE) {
       const refreshToken = getRefreshToken()
       if (!refreshToken) throw new Error('no_refresh_token')
-      res = await fetch(BASE + '/auth/refresh', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${refreshToken}` },
-      })
+      headers['Authorization'] = `Bearer ${refreshToken}`
+      res = await fetchOrThrow(BASE + '/auth/refresh', { method: 'POST', headers })
     } else {
-      res = await fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include' })
+      res = await fetchOrThrow(BASE + '/auth/refresh', { method: 'POST', credentials: 'include', headers })
     }
-    if (!res.ok) throw new Error('refresh_failed')
+    if (!res.ok) {
+      if (res.status === 403) {
+        // Протух пропуск от двери, а не сессия: спрашиваем ответы заново,
+        // но из аккаунта не выходим.
+        clearGateToken()
+        window.dispatchEvent(new Event('gate:required'))
+        throw new GateError('gate_required')
+      }
+      throw new Error('refresh_failed')
+    }
     if (IS_NATIVE) {
       const data = await res.json()
       saveTokens(data.access_token, data.refresh_token)
@@ -138,7 +165,7 @@ async function req(method, path, body, isForm = false) {
     opts.body = body
   }
 
-  let res = await fetch(BASE + path, opts)
+  let res = await fetchOrThrow(BASE + path, opts)
 
   if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login') {
     try {
@@ -147,8 +174,13 @@ async function req(method, path, body, isForm = false) {
         const token = getAccessToken()
         if (token) opts.headers['Authorization'] = `Bearer ${token}`
       }
-      res = await fetch(BASE + path, opts)
-    } catch {
+      res = await fetchOrThrow(BASE + path, opts)
+    } catch (e) {
+      // Из аккаунта выходим, только если сервер прямо отверг обновление.
+      // Обрыв связи и требование пропуска — не повод: сессия цела, а на
+      // телефоне сеть пропадает по десять раз на дню, и каждый такой обрыв
+      // раньше выкидывал на экран входа.
+      if (e instanceof NetworkError || e instanceof GateError) throw e
       window.dispatchEvent(new Event('auth:expired'))
       throw new Error('Session expired')
     }

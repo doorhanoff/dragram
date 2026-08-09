@@ -101,7 +101,9 @@ export async function downloadUrl(url, filename) {
   }
 
   try {
-    const res = await fetch(url)
+    // Пропуск нужен и здесь: в вебе его донесёт кука, а в приложении, если
+    // нативное сохранение не сработало и мы дошли до запасного пути, — нет.
+    const res = await fetch(url, { headers: gateHeaders() })
     const blob = await res.blob()
     const href = URL.createObjectURL(blob)
     const a = document.createElement('a')
