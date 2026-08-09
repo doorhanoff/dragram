@@ -7,6 +7,7 @@ import {
 } from './crypto'
 import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 import { canReadContacts, collectContactHashes } from './nativeContacts'
+import { readCachedMessages, writeCachedMessages, appendCachedMessage, dropCachedMessage, clearMessageCache } from './messageCache'
 import { showToast } from './utils'
 
 import Auth              from './components/Auth'
@@ -449,6 +450,9 @@ export default function App() {
       }
       if (data.event === 'delete') {
         setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).filter(m => m.id !== data.message_id) }))
+        // Из кеша тоже: иначе удалённое сообщение вернётся при следующем
+        // открытии чата без сети.
+        dropCachedMessage(chatId, data.message_id)
         return
       }
       if (data.event === 'error') {
@@ -481,6 +485,8 @@ export default function App() {
         const next = idx >= 0 ? list.map((m, i) => i === idx ? incoming : m) : [...list, incoming]
         return { ...prev, [chatId]: next }
       })
+      // В кеш кладём data как пришло — с нерасшифрованным текстом.
+      appendCachedMessage(userIdRef.current!, chatId, data)
     }
 
     ws.onclose = () => {
@@ -535,10 +541,26 @@ export default function App() {
 
     if (!loadedChats.current.has(chatId)) {
       loadedChats.current.add(chatId)
-      const msgs  = await api.getMessages(chatId).catch(() => [])
-      const key   = chatKeysRef.current.get(chatId)
-      const dec   = await decryptMsgs(msgs || [], key)
-      setMessages(prev => ({ ...prev, [chatId]: dec }))
+      const myId = userIdRef.current!
+      const key  = chatKeysRef.current.get(chatId)
+
+      // Сначала показываем то, что уже лежит на устройстве: чат открывается
+      // мгновенно и читается без сети. В кеше сообщения зашифрованы, как и
+      // пришли с сервера, — расшифровываем здесь, в памяти.
+      const cached = await readCachedMessages(myId, chatId)
+      if (cached.length) {
+        // Расшифровываем ДО показа: иначе на миг мелькнёт шифротекст.
+        const decCached = await decryptMsgs(cached, key)
+        setMessages(prev => ({ ...prev, [chatId]: decCached }))
+      }
+
+      // Затем спрашиваем сервер. Не ответил (нет сети) — остаётся кеш.
+      const msgs = await api.getMessages(chatId).catch(() => null)
+      if (msgs) {
+        const dec = await decryptMsgs(msgs, key)
+        setMessages(prev => ({ ...prev, [chatId]: dec }))
+        writeCachedMessages(myId, chatId, msgs)
+      }
     }
 
     connectWS(chatId)
@@ -615,6 +637,7 @@ export default function App() {
     wsRef.current?.close(); activeChatRef.current = null
     loadedChats.current.clear(); chatKeysRef.current.clear()
     clearNativeKeys()
+    clearMessageCache()
     setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
   }, [])
 
