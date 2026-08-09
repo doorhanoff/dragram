@@ -5,6 +5,7 @@ import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import VideoThumb from '../ui/VideoThumb'
 import ForwardModal from './ForwardModal'
+import CachedImg from '../ui/CachedImg'
 import { api, mediaSrc } from '../../api'
 import { parseDate } from '../../utils'
 
@@ -57,7 +58,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <img src={mediaSrc(msg.text)} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
+          <CachedImg url={msg.text} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
             onClick={() => setLightbox(true)} />
           {isSent && (
             <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">

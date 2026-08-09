@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { IconArrowLeft, IconSend, IconCornerDownRight, IconTrash, IconX } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
+import CachedImg from '../ui/CachedImg'
 import type { Post, Comment } from '../../types'
 import { api, mediaSrc } from '../../api'
 import { parseDate } from '../../utils'
@@ -140,7 +141,7 @@ export default function PostThread({ postId, userId, onBack }: Props) {
                         className={`w-full overflow-hidden ${isFirst3 ? 'col-span-2' : ''} focus:outline-none`}
                         style={{ aspectRatio: '16/9' }}
                       >
-                        <img src={mediaSrc(url)} alt="" className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
+                        <CachedImg url={url} alt="" className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
                       </button>
                 })}
               </div>

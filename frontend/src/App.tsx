@@ -8,6 +8,7 @@ import {
 import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 import { canReadContacts, collectContactHashes } from './nativeContacts'
 import { readCachedMessages, writeCachedMessages, appendCachedMessage, dropCachedMessage, clearMessageCache } from './messageCache'
+import { clearMediaCache } from './mediaCache'
 import { showToast } from './utils'
 
 import Auth              from './components/Auth'
@@ -638,6 +639,7 @@ export default function App() {
     loadedChats.current.clear(); chatKeysRef.current.clear()
     clearNativeKeys()
     clearMessageCache()
+    clearMediaCache()
     setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
   }, [])
 

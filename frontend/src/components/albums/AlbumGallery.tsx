@@ -5,6 +5,7 @@ import {
 } from '@tabler/icons-react'
 import { api, mediaSrc } from '../../api'
 import Avatar from '../ui/Avatar'
+import CachedImg from '../ui/CachedImg'
 import AddMemberModal from './AddMemberModal'
 import { downloadUrl, showToast, parseDate } from '../../utils'
 import { useBackHandler } from '../../hooks/useBackHandler'
@@ -287,7 +288,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
                           )}
                         </>
                       ) : (
-                        <img src={mediaSrc(m.link)} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
+                        <CachedImg url={m.link} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
                       )}
                       {selectMode && (
                         <div className={`absolute inset-0 transition-colors ${isSelected ? 'bg-accent/30' : 'bg-black/10'}`}>
@@ -333,7 +334,7 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
           {isVideo(active.link) ? (
             <video src={mediaSrc(active.link)} className="max-w-full max-h-full rounded-lg" controls autoPlay />
           ) : (
-            <img src={mediaSrc(active.link)} className="max-w-full max-h-full rounded-lg object-contain" />
+            <CachedImg url={active.link} className="max-w-full max-h-full rounded-lg object-contain" />
           )}
         </div>
       )}

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { IconHeart, IconMessageCircle, IconBookmark, IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
+import CachedImg from '../ui/CachedImg'
 import VideoLightbox from '../ui/VideoLightbox'
 import type { Post } from '../../types'
 import { api, mediaSrc } from '../../api'
@@ -77,7 +78,7 @@ export default function PostCard({ post, onClick }: Props) {
                 className="w-full h-full focus:outline-none flex items-center justify-center"
                 onClick={e => { e.stopPropagation(); setLightbox(0) }}
               >
-                <img src={mediaSrc(coverImg)} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
+                <CachedImg url={coverImg} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
               </button>
             ) : (
               <button
