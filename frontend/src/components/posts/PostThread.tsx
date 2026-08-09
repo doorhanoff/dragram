@@ -6,6 +6,7 @@ import CachedImg from '../ui/CachedImg'
 import type { Post, Comment } from '../../types'
 import { api, mediaSrc } from '../../api'
 import { parseDate } from '../../utils'
+import { withCache } from '../../dataCache'
 
 function fmtTime(dt?: string) {
   if (!dt) return ''
@@ -35,10 +36,10 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   useEffect(() => {
     if (!postId) return
     setLoading(true)
-    Promise.all([api.getPost(postId), api.getComments(postId)])
-      .then(([p, c]) => { setPost(p); setComments(c || []) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      withCache<Post>(`post:${postId}`, () => api.getPost(postId), setPost),
+      withCache<Comment[]>(`comments:${postId}`, async () => (await api.getComments(postId)) || [], setComments),
+    ]).finally(() => setLoading(false))
   }, [postId])
 
   async function removePost() {

@@ -9,6 +9,7 @@ import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from 
 import { canReadContacts, collectContactHashes } from './nativeContacts'
 import { readCachedMessages, writeCachedMessages, appendCachedMessage, dropCachedMessage, clearMessageCache } from './messageCache'
 import { clearMediaCache } from './mediaCache'
+import { withCache, clearDataCache } from './dataCache'
 import { showToast } from './utils'
 
 import Auth              from './components/Auth'
@@ -399,7 +400,9 @@ export default function App() {
   }, [user])
 
   const loadAlbums = useCallback(async () => {
-    try { setAlbums(await api.getAlbums() || []) } catch {}
+    const myId = userIdRef.current
+    if (!myId) return
+    await withCache<Album[]>(`albums:${myId}`, async () => (await api.getAlbums()) || [], setAlbums)
   }, [])
 
   useEffect(() => {
@@ -640,6 +643,7 @@ export default function App() {
     clearNativeKeys()
     clearMessageCache()
     clearMediaCache()
+    clearDataCache()
     setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
   }, [])
 

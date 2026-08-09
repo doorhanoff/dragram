@@ -3,6 +3,7 @@ import { IconPlus, IconSearch, IconWorld, IconUsers, IconBookmark } from '@table
 import PostCard from './PostCard'
 import type { Post } from '../../types'
 import { api } from '../../api'
+import { withCache } from '../../dataCache'
 
 type Filter = 'all' | 'friends' | 'saved'
 
@@ -26,13 +27,35 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
     setLoading(true)
     try {
       const offset = reset ? 0 : offsetRef.current
+      // Кешируем только первую страницу без поиска: она и открывается при
+      // каждом заходе. Хранить все страницы всех фильтров смысла нет —
+      // дальше человек всё равно листает с сетью.
+      const cacheable = reset && !text
+      const apply = (items: Post[]) => {
+        setPosts(items || [])
+        offsetRef.current = (items || []).length
+        setHasMore((items || []).length === 20)
+      }
+
+      if (cacheable) {
+        await withCache<Post[]>(
+          `posts:${filter}`,
+          async () => (await api.getPosts(null, 20, 0, filter)) || [],
+          apply,
+        )
+        return
+      }
+
       const items: Post[] = await api.getPosts(text || null, 20, offset, filter)
-      if (reset) { setPosts(items || []); offsetRef.current = (items || []).length }
-      else       { setPosts(p => [...p, ...(items || [])]); offsetRef.current += (items || []).length }
-      setHasMore((items || []).length === 20)
+      if (reset) apply(items)
+      else {
+        setPosts(p => [...p, ...(items || [])])
+        offsetRef.current += (items || []).length
+        setHasMore((items || []).length === 20)
+      }
     } catch {}
     finally { setLoading(false) }
-  }, [])
+  }, [filter])
 
   useEffect(() => { offsetRef.current = 0; load(query, true) }, [filter])
 

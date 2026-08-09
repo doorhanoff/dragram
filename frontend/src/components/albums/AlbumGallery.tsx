@@ -9,6 +9,7 @@ import CachedImg from '../ui/CachedImg'
 import AddMemberModal from './AddMemberModal'
 import { downloadUrl, showToast, parseDate } from '../../utils'
 import { useBackHandler } from '../../hooks/useBackHandler'
+import { withCache } from '../../dataCache'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
 function isVideo(link: string) {
@@ -62,8 +63,12 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   const touchStartPos = useRef({ x: 0, y: 0 })
 
   function load() {
-    api.getAlbum(albumId).then(setAlbum).catch(() => {})
-    api.getAlbumMaterials(albumId).then(setMaterials).catch(() => setMaterials([]))
+    // Сначала показываем сохранённое, затем обновляем с сервера: альбом
+    // открывается сразу и листается без сети.
+    withCache<AlbumDetail>(`album:${albumId}`, () => api.getAlbum(albumId), setAlbum)
+    withCache<AlbumMaterial[]>(`albumMaterials:${albumId}`, () => api.getAlbumMaterials(albumId), setMaterials)
+      // Ни кеша, ни сети — показываем пустой альбом, а не вечную загрузку.
+      .finally(() => setMaterials(prev => prev ?? []))
   }
 
   useEffect(() => { setAlbum(null); setMaterials(null); setSelectMode(false); setSelected(new Set()); load() }, [albumId])
