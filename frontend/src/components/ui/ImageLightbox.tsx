@@ -150,46 +150,48 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
       className={`fixed inset-0 z-[500] flex flex-col transition-all duration-200 ${visible ? 'bg-black/85 backdrop-blur-xl' : 'bg-black/0 backdrop-blur-none'}`}
       onClick={close}
     >
-      {/* Close */}
+      {/* Close — в углу поверх фотографии, как в галерее телефона */}
       <button
         onClick={close}
-        className="absolute right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-        style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
+        aria-label="Закрыть"
+        className="absolute right-3 z-10 w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
+        style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
       >
-        <IconX size={18} stroke={2} />
+        <IconX size={24} stroke={2.2} />
       </button>
 
       {/* Действия: скачать / переслать */}
-      <div className="absolute left-4 z-10 flex items-center gap-2" style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}>
+      <div className="absolute left-3 z-10 flex items-center gap-2" style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}>
         <button
           onClick={e => { e.stopPropagation(); downloadUrl(images[idx]) }}
-          title="Скачать"
-          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+          aria-label="Сохранить в галерею"
+          className="w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
         >
-          <IconDownload size={17} stroke={1.8} />
+          <IconDownload size={22} stroke={1.8} />
         </button>
         {onForward && (
           <button
             onClick={e => { e.stopPropagation(); onForward() }}
-            title="Переслать"
-            className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            aria-label="Переслать"
+            className="w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
           >
-            <IconShare size={17} stroke={1.8} />
+            <IconShare size={22} stroke={1.8} />
           </button>
         )}
       </div>
 
-      {/* Counter */}
+      {/* Который по счёту: единственная подсказка, что фото можно листать */}
       {images.length > 1 && (
-        <div className="absolute left-1/2 -translate-x-1/2 z-10 bg-black/50 text-white text-xs px-3 py-1 rounded-full"
-          style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}>
+        <div className="absolute left-1/2 -translate-x-1/2 z-10 bg-black/50 text-white text-md font-bold px-3.5 py-1.5 rounded-full pointer-events-none"
+          style={{ top: 'max(1.25rem, calc(env(safe-area-inset-top, 0px) + 1rem))' }}>
           {idx + 1} / {images.length}
         </div>
       )}
 
-      {/* Image */}
+      {/* Фотография занимает весь экран: поля и полоса миниатюр съедали
+          половину высоты, и снимок открывался размером с почтовую марку. */}
       <div
-        className="flex-1 flex items-center justify-center px-12 py-6 overflow-hidden touch-none"
+        className="flex-1 flex items-center justify-center overflow-hidden touch-none"
         onClick={e => e.stopPropagation()}
         onWheel={onWheel}
         onTouchStart={onTouchStart}
@@ -202,10 +204,10 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
           onMouseDown={onMouseDown}
           onDoubleClick={toggleZoom}
           onClick={e => { if (draggedRef.current) e.stopPropagation() }}
-          className={`select-none rounded-xl object-contain transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'} ${scale > 1 ? 'cursor-grab' : 'cursor-zoom-in'}`}
+          className={`select-none object-contain transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'} ${scale > 1 ? 'cursor-grab' : 'cursor-zoom-in'}`}
           style={{
-            maxWidth: '90vw',
-            maxHeight: '78vh',
+            maxWidth: '100vw',
+            maxHeight: '100dvh',
             transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
             transition: pinchRef.current || panRef.current ? 'none' : 'transform 0.15s ease-out',
           }}
@@ -213,36 +215,24 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
         />
       </div>
 
-      {/* Nav arrows */}
+      {/* Стрелки — только там, где есть мышь. На телефоне листают пальцем,
+          а поверх фотографии во весь экран стрелки только мешали бы. */}
       {images.length > 1 && scale === 1 && (
-        <>
+        <div className="hidden [@media(hover:hover)]:block">
           <button
             onClick={e => { e.stopPropagation(); prev() }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            aria-label="Предыдущее фото"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
           >
-            <IconChevronLeft size={22} stroke={1.5} />
+            <IconChevronLeft size={26} stroke={1.8} />
           </button>
           <button
             onClick={e => { e.stopPropagation(); next() }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            aria-label="Следующее фото"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
           >
-            <IconChevronRight size={22} stroke={1.5} />
+            <IconChevronRight size={26} stroke={1.8} />
           </button>
-        </>
-      )}
-
-      {/* Thumbnails strip */}
-      {images.length > 1 && scale === 1 && (
-        <div className="flex gap-1.5 justify-center pb-4 px-4 flex-shrink-0" onClick={e => e.stopPropagation()}>
-          {images.map((url, i) => (
-            <button
-              key={i}
-              onClick={() => { resetZoom(); setIdx(i) }}
-              className={`w-10 h-10 rounded-md overflow-hidden flex-shrink-0 transition-all ${i === idx ? 'ring-2 ring-white scale-110' : 'opacity-50 hover:opacity-80'}`}
-            >
-              <img src={url} alt="" className="w-full h-full object-cover" />
-            </button>
-          ))}
         </div>
       )}
     </div>

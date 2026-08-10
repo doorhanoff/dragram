@@ -5,15 +5,17 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
  *
  * В приложении ссылка с атрибутом download ничего не сохраняет — внутри
  * WebView файл «скачивается» в никуда. Поэтому на Android качает нативный
- * код и кладёт файл в «Загрузки», откуда он виден в галерее и файловом
- * менеджере. На вебе остаётся обычный способ через blob.
+ * код: фото и видео кладёт в галерею, остальное — в «Загрузки». На вебе
+ * остаётся обычный способ через blob.
  */
+export type SaveKind = 'gallery' | 'downloads'
+
 interface DownloaderPlugin {
   download(options: {
     url: string
     filename?: string
     headers?: Record<string, string>
-  }): Promise<{ uri: string; name: string }>
+  }): Promise<{ uri: string; name: string; kind?: SaveKind }>
 }
 
 const Downloader = registerPlugin<DownloaderPlugin>('Downloader')
@@ -24,7 +26,8 @@ export async function nativeDownload(
   url: string,
   filename?: string,
   headers?: Record<string, string>,
-): Promise<string> {
+): Promise<SaveKind> {
   const res = await Downloader.download({ url, filename, headers })
-  return res.name
+  // Старая сборка плагина kind не присылает — считаем, что это «Загрузки».
+  return res.kind === 'gallery' ? 'gallery' : 'downloads'
 }

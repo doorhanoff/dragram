@@ -41,28 +41,29 @@ export default function VideoLightbox({ src, onClose }: Props) {
       >
         <button
           onClick={e => { e.stopPropagation(); downloadUrl(src) }}
-          title="Сохранить"
-          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+          aria-label="Сохранить в галерею"
+          className="w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
         >
-          <IconDownload size={17} stroke={1.8} />
+          <IconDownload size={22} stroke={1.8} />
         </button>
         <button
           onClick={close}
-          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+          aria-label="Закрыть"
+          className="w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
         >
-          <IconX size={18} stroke={2} />
+          <IconX size={24} stroke={2.2} />
         </button>
       </div>
 
-      <div className="px-4 w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+      <div className="w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
         <video
           src={src}
           controls
           autoPlay
           playsInline
           preload="auto"
-          className={`rounded-xl object-contain transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'}`}
-          style={{ maxWidth: '94vw', maxHeight: '82vh', minWidth: 200, minHeight: 120 }}
+          className={`object-contain transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'}`}
+          style={{ maxWidth: '100vw', maxHeight: '100dvh', minWidth: 200, minHeight: 120 }}
         />
       </div>
     </div>

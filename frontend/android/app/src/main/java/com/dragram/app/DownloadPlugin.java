@@ -2,6 +2,7 @@ package com.dragram.app;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -31,11 +32,24 @@ import java.net.URL;
  *
  * Поэтому качаем здесь: заголовки берём из JS и передаём как есть, а файл
  * пишем потоком — так и видео на сотню мегабайт не окажется целиком в памяти.
- * Кладём через MediaStore, чтобы файл появился в «Загрузках» и в галерее,
- * а не в служебной папке приложения.
+ *
+ * Фото и видео кладём в Pictures/Dragram и Movies/Dragram — то есть туда, куда
+ * смотрит галерея. Раньше всё уходило в «Загрузки»: файл сохранялся, но в
+ * галерее не появлялся, и человек считал, что фотография не скачалась.
+ * Остальные файлы по-прежнему в «Загрузках» — им в галерее делать нечего.
  */
 @CapacitorPlugin(name = "Downloader")
 public class DownloadPlugin extends Plugin {
+
+    /** Своя папка внутри Pictures/Movies: снимки семьи не мешаются с камерой. */
+    private static final String ALBUM = "Dragram";
+
+    /** Куда в итоге лёг файл — от этого зависит подпись, которую покажет JS. */
+    private static class Saved {
+        final Uri uri;
+        final String kind;
+        Saved(Uri uri, String kind) { this.uri = uri; this.kind = kind; }
+    }
 
     @PluginMethod
     public void download(PluginCall call) {
@@ -72,15 +86,17 @@ public class DownloadPlugin extends Plugin {
 
                 String mime = conn.getContentType();
                 if (mime != null && mime.contains(";")) mime = mime.split(";")[0].trim();
+                mime = resolveMime(mime, safeName);
 
-                Uri saved;
+                Saved saved;
                 try (InputStream in = conn.getInputStream()) {
-                    saved = writeToDownloads(safeName, mime, in);
+                    saved = save(safeName, mime, in);
                 }
 
                 JSObject res = new JSObject();
-                res.put("uri", saved != null ? saved.toString() : "");
+                res.put("uri", saved.uri != null ? saved.uri.toString() : "");
                 res.put("name", safeName);
+                res.put("kind", saved.kind);
                 call.resolve(res);
             } catch (Exception e) {
                 call.reject("Не удалось сохранить файл: " + e.getMessage(), e);
@@ -92,34 +108,89 @@ public class DownloadPlugin extends Plugin {
 
     /**
      * Android 10 и новее не дают писать в общие папки напрямую — только через
-     * MediaStore. На старых версиях остаётся обычный путь к «Загрузкам».
+     * MediaStore. На старых версиях остаётся обычный путь к файлу, но галерея
+     * узнаёт о нём лишь от сканера — без него фотография не появится, пока
+     * телефон не перезагрузят.
      */
-    private Uri writeToDownloads(String name, String mime, InputStream in) throws Exception {
+    private Saved save(String name, String mime, InputStream in) throws Exception {
+        boolean isImage = mime != null && mime.startsWith("image/");
+        boolean isVideo = mime != null && mime.startsWith("video/");
+        String kind = (isImage || isVideo) ? "gallery" : "downloads";
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Uri collection;
+            String relative;
+            if (isImage) {
+                collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                relative = Environment.DIRECTORY_PICTURES + "/" + ALBUM;
+            } else if (isVideo) {
+                collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                relative = Environment.DIRECTORY_MOVIES + "/" + ALBUM;
+            } else {
+                collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                relative = Environment.DIRECTORY_DOWNLOADS;
+            }
+
             ContentResolver resolver = getContext().getContentResolver();
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Downloads.DISPLAY_NAME, name);
-            if (mime != null) values.put(MediaStore.Downloads.MIME_TYPE, mime);
-            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            if (mime != null) values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relative);
+            // IS_PENDING прячет файл от галереи, пока он не дозагрузился: иначе
+            // в ленте на секунду появляется наполовину скачанная картинка.
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
-            Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            Uri uri = resolver.insert(collection, values);
             if (uri == null) throw new IllegalStateException("MediaStore отказал в записи");
             try (OutputStream out = resolver.openOutputStream(uri)) {
                 copy(in, out);
             }
             values.clear();
-            values.put(MediaStore.Downloads.IS_PENDING, 0);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
             resolver.update(uri, values, null, null);
-            return uri;
+            return new Saved(uri, kind);
         }
 
-        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Нет папки «Загрузки»");
+        File dir;
+        if (isImage) {
+            dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), ALBUM);
+        } else if (isVideo) {
+            dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), ALBUM);
+        } else {
+            dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        }
+        if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Не удалось создать папку " + dir);
         File target = uniqueFile(dir, name);
         try (OutputStream out = new FileOutputStream(target)) {
             copy(in, out);
         }
-        return Uri.fromFile(target);
+        MediaScannerConnection.scanFile(
+            getContext(),
+            new String[]{ target.getAbsolutePath() },
+            mime == null ? null : new String[]{ mime },
+            null
+        );
+        return new Saved(Uri.fromFile(target), kind);
+    }
+
+    /**
+     * Тип файла решает, попадёт ли фотография в галерею. Заголовку сервера
+     * верим не всегда: на application/octet-stream (а его отдаёт хранилище,
+     * если тип не проставлен) снимок ушёл бы в «Загрузки» — определяем по
+     * расширению.
+     */
+    private String resolveMime(String headerMime, String name) {
+        boolean useless = headerMime == null
+            || headerMime.isEmpty()
+            || headerMime.equals("application/octet-stream");
+        if (!useless) return headerMime;
+
+        String ext = MimeTypeMap.getFileExtensionFromUrl(name);
+        if (ext != null && !ext.isEmpty()) {
+            String guess = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase());
+            if (guess != null) return guess;
+        }
+        return headerMime;
     }
 
     private void copy(InputStream in, OutputStream out) throws Exception {

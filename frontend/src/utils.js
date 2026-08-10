@@ -193,12 +193,13 @@ export async function downloadUrl(url, filename) {
   const name = filename || url.split('?')[0].split('/').pop() || 'file'
 
   // В приложении ссылка с download ничего не сохраняет: внутри WebView файл
-  // уходит в никуда. Поэтому на Android качает нативный код и кладёт файл в
-  // «Загрузки». Заголовок с пропуском передаём явно — куки там не работают.
+  // уходит в никуда. Поэтому на Android качает нативный код: фото и видео
+  // кладёт в галерею, остальное — в «Загрузки». Заголовок с пропуском
+  // передаём явно — куки там не работают.
   if (isNativeDownload()) {
     try {
-      await nativeDownload(url, name, gateHeaders())
-      showToast('Сохранено в «Загрузки»')
+      const kind = await nativeDownload(url, name, gateHeaders())
+      showToast(kind === 'gallery' ? 'Сохранено в галерею' : 'Сохранено в «Загрузки»')
       return
     } catch (e) {
       // Не вышло (старая Android без разрешения, сбой сети) — пробуем обычным

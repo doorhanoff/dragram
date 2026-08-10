@@ -6,10 +6,11 @@ import {
 import { api, mediaSrc } from '../../api'
 import Avatar from '../ui/Avatar'
 import CachedImg from '../ui/CachedImg'
+import ImageLightbox from '../ui/ImageLightbox'
+import VideoLightbox from '../ui/VideoLightbox'
 import AddMemberModal from './AddMemberModal'
 import { downloadUrl, showToast, parseDate } from '../../utils'
 import { ask } from '../ui/dialogs'
-import { useBackHandler } from '../../hooks/useBackHandler'
 import { withCache } from '../../dataCache'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
@@ -74,8 +75,11 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
 
   useEffect(() => { setAlbum(null); setMaterials(null); setSelectMode(false); setSelected(new Set()); load() }, [albumId])
 
+  // Кнопку «назад» перехватывает сам лайтбокс, пока открыт.
   const closeActive = useCallback(() => setActive(null), [])
-  useBackHandler(closeActive, !!active)
+
+  // Листать пальцем можно только фотографии: видео открывается своим плеером.
+  const photos = (materials || []).filter(m => !isVideo(m.link))
 
   function toggleSelect(id: string) {
     setSelected(prev => {
@@ -186,30 +190,40 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
         </div>
 
         {selectMode ? (
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <span className="text-md font-bold text-muted flex-1 min-w-0">
-              {selected.size ? `Выбрано: ${selected.size}` : 'Отметьте файлы'}
-            </span>
-            <button onClick={downloadSelected} disabled={selected.size === 0 || downloading} className="btn btn-primary">
-              <IconDownload size={20} stroke={1.8} />
-              {downloading ? 'Скачиваем…' : 'Скачать'}
-            </button>
-            <button
-              onClick={deleteSelected}
-              disabled={selected.size === 0 || deleting}
-              className="btn btn-secondary"
-              style={{ color: 'var(--danger)' }}
-            >
-              <IconTrash size={20} stroke={1.8} />
-              {deleting ? 'Удаляем…' : 'Удалить'}
-            </button>
-            <button
-              onClick={() => { setSelectMode(false); setSelected(new Set()) }}
-              aria-label="Выйти из режима выбора"
-              className="tap rounded-2xl text-muted"
-            >
-              <IconX size={24} stroke={2} />
-            </button>
+          // Подпись и кнопки — разными строками. В одну строку они не
+          // помещались: на узком экране «Выбрано: N» налезало на «Скачать».
+          <div className="flex flex-col gap-2.5 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-md font-bold text-muted flex-1 min-w-0 truncate">
+                {selected.size ? `Выбрано: ${selected.size}` : 'Отметьте файлы'}
+              </span>
+              <button
+                onClick={() => { setSelectMode(false); setSelected(new Set()) }}
+                aria-label="Выйти из режима выбора"
+                className="tap rounded-2xl text-muted flex-shrink-0"
+              >
+                <IconX size={24} stroke={2} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadSelected}
+                disabled={selected.size === 0 || downloading}
+                className="btn btn-primary flex-1 min-w-0"
+              >
+                <IconDownload size={20} stroke={1.8} />
+                {downloading ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={selected.size === 0 || deleting}
+                className="btn btn-secondary flex-1 min-w-0"
+                style={{ color: 'var(--danger)' }}
+              >
+                <IconTrash size={20} stroke={1.8} />
+                {deleting ? 'Удаляем…' : 'Удалить'}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -221,15 +235,6 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
               <IconUpload size={20} stroke={1.8} />
               {uploading ? 'Загружаем…' : 'Загрузить'}
             </button>
-            {/* Обычная кнопка вместо подсказки 10 px: долгое нажатие остаётся
-                ускорителем для тех, кто его знает, но пожилой человек его не
-                пробует — он боится «зажать не то». */}
-            {materials !== null && materials.length > 0 && (
-              <button onClick={() => setSelectMode(true)} className="btn btn-secondary">
-                <IconChecks size={20} stroke={1.8} />
-                Выбрать
-              </button>
-            )}
             <button onClick={() => setShowAddMember(true)} className="btn btn-secondary">
               <IconUserPlus size={20} stroke={1.8} />
               <span className="hidden sm:inline">Добавить людей</span>
@@ -323,33 +328,17 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
         </div>
       </div>
 
-      {active && (
-        <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
-          onClick={e => e.target === e.currentTarget && setActive(null)}
-        >
-          <div className="absolute top-4 right-4 flex items-center gap-2">
-            <button
-              onClick={() => downloadUrl(mediaSrc(active.link), active.link.split('/').pop())}
-              title="Скачать"
-              className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25"
-            >
-              <IconDownload size={20} stroke={1.5} />
-            </button>
-            <button
-              onClick={() => setActive(null)}
-              title="Закрыть"
-              className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25"
-            >
-              <IconX size={20} stroke={1.5} />
-            </button>
-          </div>
-          {isVideo(active.link) ? (
-            <video src={mediaSrc(active.link)} className="max-w-full max-h-full rounded-lg" controls autoPlay />
-          ) : (
-            <CachedImg url={active.link} className="max-w-full max-h-full rounded-lg object-contain" />
-          )}
-        </div>
+      {/* Просмотр — общий лайтбокс: фотография во весь экран, крестик в углу
+          и листание пальцем по всему альбому, а не по одному снимку. */}
+      {active && !isVideo(active.link) && (
+        <ImageLightbox
+          images={photos.map(m => mediaSrc(m.link))}
+          startIndex={Math.max(0, photos.findIndex(m => m.id === active.id))}
+          onClose={closeActive}
+        />
+      )}
+      {active && isVideo(active.link) && (
+        <VideoLightbox src={mediaSrc(active.link)} onClose={closeActive} />
       )}
 
       {showAddMember && album && (
