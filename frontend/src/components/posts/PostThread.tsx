@@ -1,19 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { IconArrowLeft, IconSend, IconCornerDownRight, IconTrash, IconX } from '@tabler/icons-react'
+import { IconArrowLeft, IconSend, IconCornerDownRight, IconTrash, IconX, IconMessageCircle } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import CachedImg from '../ui/CachedImg'
 import type { Post, Comment } from '../../types'
 import { api, mediaSrc } from '../../api'
-import { parseDate } from '../../utils'
+// Время без даты врало: комментарий недельной давности выглядел написанным
+// сегодня. fmtDateTime добавляет «вчера» и число, когда это не сегодня.
+import { fmtDateTime } from '../../utils'
+import { ask, sayError } from '../ui/dialogs'
 import { withCache } from '../../dataCache'
-
-function fmtTime(dt?: string) {
-  if (!dt) return ''
-  const d = parseDate(dt)
-  if (!d) return ''
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
-}
 
 interface Props {
   postId: string | null
@@ -30,7 +26,6 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   const [lightbox,      setLightbox] = useState<number | null>(null)
   const [deleting,      setDeleting] = useState(false)
   const [replyTo,       setReplyTo]  = useState<Comment | null>(null)
-  const [activeComment, setActiveComment] = useState<string | null>(null)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -43,15 +38,23 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   }, [postId])
 
   async function removePost() {
-    // Пост уносит с собой комментарии и загруженные файлы, поэтому
+    // Запись уносит с собой комментарии и загруженные файлы, поэтому
     // переспрашиваем: вернуть их будет неоткуда.
-    if (!post || !confirm('Удалить пост? Вместе с ним исчезнут комментарии и загруженные файлы.')) return
+    if (!post) return
+    const ok = await ask({
+      title: 'Удалить запись?',
+      text: 'Вместе с ней исчезнут комментарии и загруженные фотографии. Вернуть их будет нельзя.',
+      confirmLabel: 'Удалить',
+      cancelLabel: 'Оставить',
+      danger: true,
+    })
+    if (!ok) return
     setDeleting(true)
     try {
       await api.deletePost(post.id)
       onBack()
-    } catch (e: any) {
-      alert('Не удалось удалить: ' + e.message)
+    } catch (e) {
+      sayError('Не удалось удалить запись', e)
     } finally {
       setDeleting(false)
     }
@@ -93,19 +96,19 @@ export default function PostThread({ postId, userId, onBack }: Props) {
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
       {/* Header */}
-      <div className="bg-bg flex items-center gap-3 px-4 py-4 flex-shrink-0">
-        <button onClick={onBack} className="text-accent hover:opacity-70 transition-opacity">
-          <IconArrowLeft size={24} stroke={2.4} />
+      <div className="bg-bg flex items-center gap-1 px-2 py-2 flex-shrink-0">
+        <button onClick={onBack} aria-label="Назад" className="tap rounded-2xl text-accent">
+          <IconArrowLeft size={26} stroke={2.2} />
         </button>
-        <span className="text-xl font-extrabold text-primary ellipsis flex-1">{post.title}</span>
+        <span className="text-xl font-bold text-primary ellipsis flex-1 px-1">{post.title}</span>
         {post.created_by_id === userId && (
           <button
             onClick={removePost}
             disabled={deleting}
-            title="Удалить пост"
-            className="text-muted hover:text-red-500 transition-colors disabled:opacity-40"
+            aria-label="Удалить запись"
+            className="tap rounded-2xl text-muted hover:text-danger transition-colors disabled:opacity-40"
           >
-            <IconTrash size={20} stroke={1.9} />
+            <IconTrash size={22} stroke={1.9} />
           </button>
         )}
       </div>
@@ -116,10 +119,10 @@ export default function PostThread({ postId, userId, onBack }: Props) {
           <div className="bg-surface border border-border rounded-card overflow-hidden">
             {/* Author */}
             <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-              <Avatar name={post.created_by?.name} id={post.created_by_id} imageUrl={post.created_by?.image_url} size={34} />
+              <Avatar name={post.created_by?.name} id={post.created_by_id} imageUrl={post.created_by?.image_url} size={40} />
               <div>
-                <div className="text-md font-medium text-primary">{post.created_by?.name || 'Аноним'}</div>
-                <div className="text-xs text-muted">{fmtTime(post.created_at)}</div>
+                <div className="text-lg font-bold text-primary">{post.created_by?.name || 'Аноним'}</div>
+                <div className="text-sm text-muted">{fmtDateTime(post.created_at)}</div>
               </div>
             </div>
 
@@ -152,21 +155,21 @@ export default function PostThread({ postId, userId, onBack }: Props) {
           {/* Comments */}
           <div className="bg-surface border border-border rounded-card overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A0A0B0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-              <span className="text-md font-medium text-primary">{comments.length} комментариев</span>
+              <IconMessageCircle size={18} stroke={1.8} className="text-muted" />
+              <span className="text-md font-bold text-primary">
+                {comments.length === 0 ? 'Комментариев пока нет' : `Комментариев: ${comments.length}`}
+              </span>
             </div>
 
             {/* Reply banner */}
             {replyTo && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-accent-light border-b border-border">
-                <IconCornerDownRight size={13} stroke={2} className="text-accent flex-shrink-0" />
-                <span className="text-xs text-accent flex-1 ellipsis">
-                  Ответ на: <b>{replyTo.created_by?.name || 'Аноним'}</b> — {replyTo.text.slice(0, 60)}{replyTo.text.length > 60 ? '…' : ''}
+              <div className="flex items-center gap-2 px-4 py-2 border-b border-border" style={{ background: 'var(--surface2)' }}>
+                <IconCornerDownRight size={16} stroke={2} className="text-accent flex-shrink-0" />
+                <span className="text-sm text-primary flex-1 ellipsis">
+                  Ответ: <b>{replyTo.created_by?.name || 'Аноним'}</b> — {replyTo.text.slice(0, 60)}{replyTo.text.length > 60 ? '…' : ''}
                 </span>
-                <button onClick={() => setReplyTo(null)} className="text-muted hover:text-primary transition-colors">
-                  <IconX size={14} stroke={2} />
+                <button onClick={() => setReplyTo(null)} aria-label="Не отвечать" className="tap-sm rounded-xl text-muted">
+                  <IconX size={20} stroke={2} />
                 </button>
               </div>
             )}
@@ -181,62 +184,57 @@ export default function PostThread({ postId, userId, onBack }: Props) {
                 placeholder={replyTo ? `Ответить ${replyTo.created_by?.name || ''}…` : 'Написать комментарий…'}
                 rows={1}
                 autoFocus={!!replyTo}
-                className="flex-1 bg-bg rounded-2xl px-4 py-2.5 text-md font-semibold text-primary outline-none resize-none placeholder:text-muted border border-transparent focus:border-accent transition-colors"
+                className="flex-1 bg-bg rounded-2xl px-4 py-3 text-md text-primary outline-none resize-none placeholder:text-muted border border-transparent focus:border-accent transition-colors"
               />
               <button
                 onClick={send}
                 disabled={!text.trim() || sending}
-                className="w-9 h-9 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0"
+                aria-label="Отправить комментарий"
+                className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0"
               >
-                <IconSend size={15} stroke={1.5} />
+                <IconSend size={18} stroke={1.8} />
               </button>
             </div>
 
             {/* Comment list */}
             <div className="divide-y divide-border">
-              {comments.map(c => {
-                const isCActive = activeComment === c.id
-                return (
-                <div
-                  key={c.id}
-                  className="flex gap-3 px-4 py-3 group"
-                  onTouchStart={() => setActiveComment(prev => prev === c.id ? null : c.id)}
-                >
-                  <Avatar name={c.created_by?.name} id={c.created_by_id} imageUrl={c.created_by?.image_url} size={28} />
+              {comments.map(c => (
+                <div key={c.id} className="flex gap-3 px-4 py-3">
+                  <Avatar name={c.created_by?.name} id={c.created_by_id} imageUrl={c.created_by?.image_url} size={36} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                      <span className="text-md font-medium text-primary">{c.created_by?.name || 'Аноним'}</span>
-                      <span className="text-xs text-[#bbb]">{fmtTime(c.created_at)}</span>
-                      <button
-                        onClick={e => { e.stopPropagation(); setReplyTo(c); setActiveComment(null); textRef.current?.focus() }}
-                        className={`text-xs text-accent transition-all hover:underline ${isCActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                      >
-                        ответить
-                      </button>
-                      {c.created_by_id === userId && (
-                        <button
-                          onClick={e => { e.stopPropagation(); del(c.id); setActiveComment(null) }}
-                          className={`ml-auto text-xs text-muted hover:text-red-400 transition-all ${isCActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                        >удалить</button>
-                      )}
+                      <span className="text-md font-bold text-primary">{c.created_by?.name || 'Аноним'}</span>
+                      <span className="text-sm text-muted">{fmtDateTime(c.created_at)}</span>
                     </div>
                     {/* Цитата если ответ */}
                     {(c as any).reply_to && (
-                      <div className="flex items-start gap-1.5 mb-1.5 pl-2 border-l-2 border-accent/40">
-                        <span className="text-xs text-muted leading-relaxed ellipsis">
-                          <b className="text-accent-text">{(c as any).reply_to.created_by?.name || 'Аноним'}:</b>{' '}
+                      <div className="flex items-start gap-1.5 mb-1.5 pl-2 border-l-2 border-accent">
+                        <span className="text-sm text-muted leading-relaxed ellipsis">
+                          <b className="text-accent">{(c as any).reply_to.created_by?.name || 'Аноним'}:</b>{' '}
                           {(c as any).reply_to.text.slice(0, 80)}{(c as any).reply_to.text.length > 80 ? '…' : ''}
                         </span>
                       </div>
                     )}
                     <p className="text-md text-primary leading-relaxed">{c.text}</p>
+                    {/* Кнопки, а не текст 10 px: попасть по надписи в две
+                        строчки высотой пожилой палец не может. */}
+                    <div className="flex items-center gap-1 -ml-2 mt-0.5">
+                      <button
+                        onClick={e => { e.stopPropagation(); setReplyTo(c); textRef.current?.focus() }}
+                        className="tap-sm px-3 rounded-xl text-sm font-bold text-accent"
+                      >
+                        Ответить
+                      </button>
+                      {c.created_by_id === userId && (
+                        <button
+                          onClick={e => { e.stopPropagation(); del(c.id) }}
+                          className="tap-sm px-3 rounded-xl text-sm font-bold text-muted hover:text-danger transition-colors"
+                        >Удалить</button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )
-              })}
-              {comments.length === 0 && (
-                <p className="text-sm text-muted text-center py-6">Комментариев пока нет</p>
-              )}
+              ))}
             </div>
 
           </div>

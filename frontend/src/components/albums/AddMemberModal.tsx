@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { IconX, IconSearch, IconPlus } from '@tabler/icons-react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { IconX, IconPlus, IconCheck } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import { api } from '../../api'
 import { useBackHandler } from '../../hooks/useBackHandler'
-import type { Member } from '../../types'
+import type { Member, User } from '../../types'
 
 interface Props {
   members: Member[]
@@ -13,73 +13,80 @@ interface Props {
 
 export default function AddMemberModal({ members, onClose, onAdd }: Props) {
   useBackHandler(onClose)
+  const [people, setPeople] = useState<User[] | null>(null)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<any[]>([])
-  const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState<string | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [added, setAdded] = useState<Set<string>>(new Set())
 
-  useEffect(() => { inputRef.current?.focus() }, [])
-
+  // Список родных целиком: при полусотне знакомых искать не нужно, а поиск
+  // «от трёх букв» на пустом экране выглядел так, будто человека здесь нет.
   useEffect(() => {
-    clearTimeout(timerRef.current)
-    // Поиск по серверу — от 3 символов.
-    if (query.trim().length < 3) { setResults([]); return }
-    setSearching(true)
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await api.searchUsers(query.trim())
-        setResults((res || []).filter((u: any) => !members.find(m => m.id === u.id)))
-      } catch {}
-      finally { setSearching(false) }
-    }, 300)
-  }, [query, members])
+    api.getDirectory().then((list: User[]) => setPeople(list || [])).catch(() => setPeople([]))
+  }, [])
 
-  async function add(u: any) {
+  const shown = useMemo(() => {
+    const already = new Set(members.map(m => String(m.id)))
+    const q = query.trim().toLowerCase()
+    return (people || [])
+      .filter(u => !already.has(String(u.id)))
+      .filter(u => !q || u.name.toLowerCase().includes(q))
+  }, [people, members, query])
+
+  async function add(u: User) {
     setAdding(u.id)
     try {
       await onAdd(u.id)
-      setResults(prev => prev.filter(r => r.id !== u.id))
+      setAdded(prev => new Set(prev).add(u.id))
     } finally {
       setAdding(null)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-surface rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-lg font-medium text-primary">Добавить участника</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:bg-bg"><IconX size={16} stroke={1.5} /></button>
+    <div className="sheet-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="sheet">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+          <h2 className="text-xl font-bold text-primary flex-1">Кого добавить в альбом</h2>
+          <button onClick={onClose} aria-label="Закрыть" className="tap-sm rounded-xl text-muted">
+            <IconX size={22} stroke={2} />
+          </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center gap-2 bg-bg rounded-lg px-3 py-2 border border-transparent focus-within:border-accent transition-colors">
-            <IconSearch size={14} stroke={1.5} className="text-muted flex-shrink-0" />
+        <div className="overflow-y-auto flex-1 px-4 py-3 pb-safe">
+          {(people?.length || 0) > 8 && (
             <input
-              ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Найти пользователя по имени или телефону…"
-              className="flex-1 bg-transparent outline-none text-md text-primary placeholder:text-muted"
+              placeholder="Найти по имени"
+              className="field mb-3"
             />
-          </div>
+          )}
 
-          <div className="flex flex-col gap-0.5">
-            {searching && <p className="text-sm text-muted py-2 text-center">Поиск…</p>}
-            {!searching && query && results.length === 0 && <p className="text-sm text-muted py-2 text-center">Никого не найдено</p>}
-            {results.map(u => (
-              <button key={u.id} onClick={() => add(u)} disabled={adding === u.id}
-                className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-bg transition-colors text-left disabled:opacity-50">
-                <Avatar name={u.name} id={u.id} imageUrl={u.image_url} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-md font-medium text-primary">{u.name}</div>
-                  <div className="text-sm text-muted">{u.phone_number}</div>
-                </div>
-                <IconPlus size={14} stroke={2} className="text-accent flex-shrink-0" />
-              </button>
-            ))}
+          {people === null && <p className="text-md text-muted py-6 text-center">Загрузка…</p>}
+
+          <div className="flex flex-col">
+            {shown.map(u => {
+              const isAdded = added.has(u.id)
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => !isAdded && add(u)}
+                  disabled={adding === u.id || isAdded}
+                  className="flex items-center gap-3 py-2 rounded-2xl hover:bg-bg transition-colors text-left disabled:opacity-60"
+                >
+                  <Avatar name={u.name} id={u.id} imageUrl={u.image_url} size={48} />
+                  <span className="flex-1 min-w-0 text-lg font-bold text-primary ellipsis">{u.name}</span>
+                  <span className="tap-sm text-accent flex-shrink-0">
+                    {isAdded ? <IconCheck size={22} stroke={2.4} /> : <IconPlus size={22} stroke={2.2} />}
+                  </span>
+                </button>
+              )
+            })}
+            {people !== null && shown.length === 0 && (
+              <p className="text-md text-muted py-6 text-center">
+                {query ? 'Никого с таким именем нет' : 'Все уже в альбоме'}
+              </p>
+            )}
           </div>
         </div>
       </div>

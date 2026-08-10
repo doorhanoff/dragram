@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { IconX, IconSearch, IconPlus, IconCamera } from '@tabler/icons-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { IconX, IconCamera, IconCheck } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import { api } from '../../api'
 import { useBackHandler } from '../../hooks/useBackHandler'
+import type { User } from '../../types'
 
 interface Props {
   currentUserId: string
@@ -14,32 +15,27 @@ export default function GroupChatModal({ currentUserId, onClose, onCreate }: Pro
   useBackHandler(onClose)
   const [name,     setName]     = useState('')
   const [query,    setQuery]    = useState('')
-  const [results,  setResults]  = useState<any[]>([])
-  const [selected, setSelected] = useState<{ id: string; name: string }[]>([])
-  const [searching,setSearching]= useState(false)
+  const [people,   setPeople]   = useState<User[] | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [creating, setCreating] = useState(false)
   const [error,    setError]    = useState('')
   const [preview,  setPreview]  = useState<string | null>(null)
   const [photo,    setPhoto]    = useState<File | null>(null)
-  const timerRef  = useRef<ReturnType<typeof setTimeout>>()
-  const inputRef  = useRef<HTMLInputElement>(null)
   const fileRef   = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { inputRef.current?.focus() }, [])
-
+  // Список родных целиком, а не поиск от трёх букв: при полусотне знакомых
+  // все помещаются в один список, и галочками отмечать проще, чем искать.
   useEffect(() => {
-    clearTimeout(timerRef.current)
-    // Поиск по серверу — от 3 символов.
-    if (query.trim().length < 3) { setResults([]); return }
-    setSearching(true)
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await api.searchUsers(query.trim())
-        setResults((res || []).filter((u: any) => u.id !== currentUserId && !selected.find(s => s.id === u.id)))
-      } catch {}
-      finally { setSearching(false) }
-    }, 300)
-  }, [query, currentUserId, selected])
+    api.getDirectory()
+      .then((list: User[]) => setPeople((list || []).filter(u => String(u.id) !== String(currentUserId))))
+      .catch(() => setPeople([]))
+  }, [currentUserId])
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return people || []
+    return (people || []).filter(u => u.name.toLowerCase().includes(q))
+  }, [people, query])
 
   function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -49,39 +45,42 @@ export default function GroupChatModal({ currentUserId, onClose, onCreate }: Pro
     e.target.value = ''
   }
 
-  function add(u: any) {
-    setSelected(p => [...p, { id: u.id, name: u.name }])
-    setQuery(''); setResults([])
-    inputRef.current?.focus()
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
-  function remove(id: string) { setSelected(p => p.filter(m => m.id !== id)) }
-
   async function submit() {
-    if (!name.trim()) { setError('Введите название'); return }
-    if (selected.length < 1) { setError('Добавьте хотя бы одного участника'); return }
+    if (!name.trim()) { setError('Придумайте название — по нему группу будут узнавать'); return }
+    if (selected.size < 1) { setError('Отметьте хотя бы одного человека'); return }
     setError(''); setCreating(true)
-    try { await onCreate({ name: name.trim(), members: selected.map(m => m.id), photo }) }
-    catch (err: any) { setError(err.message); setCreating(false) }
+    try { await onCreate({ name: name.trim(), members: [...selected], photo }) }
+    catch (err: any) { setError('Не получилось создать группу. Попробуйте ещё раз.'); console.warn(err); setCreating(false) }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-surface rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[88vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-lg font-medium text-primary">Новая группа</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover:bg-bg"><IconX size={16} stroke={1.5} /></button>
+    <div className="sheet-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="sheet">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+          <h2 className="text-xl font-bold text-primary flex-1">Новая группа</h2>
+          <button onClick={onClose} aria-label="Закрыть" className="tap-sm rounded-xl text-muted">
+            <IconX size={22} stroke={2} />
+          </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-4 flex flex-col gap-4">
-          {/* Avatar + name row */}
+        <div className="overflow-y-auto flex-1 px-4 py-4 flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => fileRef.current?.click()}
-              className="w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center relative overflow-hidden bg-accent-light border-2 border-dashed border-accent/30 hover:border-accent transition-colors">
+            <button
+              onClick={() => fileRef.current?.click()}
+              aria-label="Фото группы"
+              className="w-16 h-16 rounded-full flex-shrink-0 flex items-center justify-center relative overflow-hidden bg-surface2 border-2 border-dashed border-border hover:border-accent transition-colors"
+            >
               {preview
                 ? <img src={preview} className="w-full h-full object-cover" alt="" />
-                : <IconCamera size={20} stroke={1.5} className="text-accent" />
+                : <IconCamera size={22} stroke={1.6} className="text-accent" />
               }
             </button>
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickPhoto} />
@@ -89,59 +88,58 @@ export default function GroupChatModal({ currentUserId, onClose, onCreate }: Pro
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Название группы"
-              className="flex-1 bg-bg rounded-lg px-3 py-2.5 text-md text-primary outline-none border border-transparent focus:border-accent transition-colors placeholder:text-muted"
+              maxLength={100}
+              autoFocus
+              className="field flex-1"
             />
           </div>
 
-          {/* Selected chips */}
-          {selected.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {selected.map(m => (
-                <div key={m.id} className="flex items-center gap-1.5 bg-accent-light text-accent-text text-sm px-2.5 py-1 rounded-full">
-                  <span>{m.name}</span>
-                  <button onClick={() => remove(m.id)} className="text-muted hover:text-red-400 transition-colors leading-none">×</button>
-                </div>
-              ))}
+          <div>
+            <div className="text-md text-muted mb-2">
+              Кого добавить{selected.size ? `: выбрано ${selected.size}` : ''}
             </div>
-          )}
-
-          {/* Search */}
-          <div className="flex items-center gap-2 bg-bg rounded-lg px-3 py-2 border border-transparent focus-within:border-accent transition-colors">
-            <IconSearch size={14} stroke={1.5} className="text-muted flex-shrink-0" />
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Найти участника…"
-              className="flex-1 bg-transparent outline-none text-md text-primary placeholder:text-muted"
-            />
-          </div>
-
-          {/* Results */}
-          <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
-            {searching && <p className="text-sm text-muted py-2 text-center">Поиск…</p>}
-            {!searching && query && results.length === 0 && <p className="text-sm text-muted py-2 text-center">Никого не найдено</p>}
-            {results.map(u => (
-              <button key={u.id} onClick={() => add(u)}
-                className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-bg transition-colors text-left">
-                <Avatar name={u.name} id={u.id} imageUrl={u.image_url} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-md font-medium text-primary">{u.name}</div>
-                  <div className="text-sm text-muted">{u.phone_number}</div>
-                </div>
-                <IconPlus size={14} stroke={2} className="text-accent flex-shrink-0" />
-              </button>
-            ))}
+            {(people?.length || 0) > 8 && (
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Найти по имени"
+                className="field mb-2"
+              />
+            )}
+            {people === null && <p className="text-md text-muted py-4 text-center">Загрузка…</p>}
+            <div className="flex flex-col">
+              {shown.map(u => {
+                const isOn = selected.has(u.id)
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => toggle(u.id)}
+                    className="flex items-center gap-3 py-2 rounded-2xl hover:bg-bg transition-colors text-left"
+                  >
+                    <Avatar name={u.name} id={u.id} imageUrl={u.image_url} size={48} />
+                    <span className="flex-1 min-w-0 text-lg font-bold text-primary ellipsis">{u.name}</span>
+                    <span
+                      className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-1"
+                      style={isOn
+                        ? { background: 'var(--accent)', color: 'var(--on-accent)' }
+                        : { border: '2px solid var(--border)' }}
+                    >
+                      {isOn && <IconCheck size={16} stroke={3} />}
+                    </span>
+                  </button>
+                )
+              })}
+              {people !== null && shown.length === 0 && (
+                <p className="text-md text-muted py-4 text-center">Никого не нашлось</p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
-        {error && <p className="text-xs text-red-500 text-center px-5">{error}</p>}
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-muted hover:bg-bg transition-colors">Отмена</button>
-          <button onClick={submit} disabled={creating}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-text transition-colors disabled:opacity-50">
-            {creating ? 'Создаём…' : `Создать${selected.length > 0 ? ` (${selected.length})` : ''}`}
+        <div className="px-4 py-3 border-t border-border flex-shrink-0 pb-safe">
+          {error && <p className="text-md font-bold text-danger text-center mb-2">{error}</p>}
+          <button onClick={submit} disabled={creating} className="btn btn-primary w-full">
+            {creating ? 'Создаём…' : 'Создать группу'}
           </button>
         </div>
       </div>

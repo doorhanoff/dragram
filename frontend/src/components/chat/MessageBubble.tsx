@@ -4,10 +4,12 @@ import Avatar from '../ui/Avatar'
 import ImageLightbox from '../ui/ImageLightbox'
 import VideoLightbox from '../ui/VideoLightbox'
 import VideoThumb from '../ui/VideoThumb'
+import VoiceMessage from './VoiceMessage'
 import ForwardModal from './ForwardModal'
 import CachedImg from '../ui/CachedImg'
 import { api, mediaSrc } from '../../api'
-import { parseDate } from '../../utils'
+import { parseDate, nameColor } from '../../utils'
+import { useTheme } from '../../theme'
 
 function fmtTime(dt?: string): string {
   const d = parseDate(dt)
@@ -16,18 +18,24 @@ function fmtTime(dt?: string): string {
 
 // Одна галочка — отправлено, две — прочитано
 function Checks({ isRead, white }: { isRead: boolean; white?: boolean }) {
-  const color = white ? 'rgba(255,255,255,0.65)' : 'var(--muted)'
+  const color = white ? 'rgba(255,255,255,0.75)' : 'var(--muted)'
   const readColor = white ? '#fff' : 'var(--accent)'
   return (
-    <svg width="16" height="10" viewBox="0 0 16 10" fill="none" className="inline-block align-middle ml-1 flex-shrink-0">
-      {/* первая галочка */}
-      <path d="M1 5L4 8L9 2" stroke={isRead ? readColor : color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-      {/* вторая галочка — только если прочитано */}
+    <svg width="16" height="10" viewBox="0 0 16 10" fill="none" className="inline-block align-middle flex-shrink-0">
+      <path d="M1 5L4 8L9 2" stroke={isRead ? readColor : color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       {isRead && (
-        <path d="M5 5L8 8L13 2" stroke={readColor} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M5 5L8 8L13 2" stroke={readColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       )}
     </svg>
   )
+}
+
+/** Короткая подпись вместо содержимого — для превью цитаты. */
+export function shortContent(type: string, text: string): string {
+  if (type === 'image') return '📷 Фото'
+  if (type === 'video') return '🎥 Видео'
+  if (type === 'audio') return '🎵 Голосовое сообщение'
+  return text
 }
 
 interface Props {
@@ -35,22 +43,33 @@ interface Props {
   userId: string
   isGroup?: boolean
   senderMember?: Member
+  /** Прокрутить к процитированному сообщению по нажатию на цитату. */
+  onQuoteClick?: (messageId: string) => void
 }
 
-export default function MessageBubble({ msg, userId, isGroup, senderMember }: Props) {
+export default function MessageBubble({ msg, userId, isGroup, senderMember, onQuoteClick }: Props) {
   const isSent = (msg.writer || msg.sender_id) === userId
   const time   = fmtTime(msg.date || msg.created_at)
   const [lightbox, setLightbox] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
   const [forwarding, setForwarding] = useState(false)
+  const { dark } = useTheme()
 
-  // Левая часть: аватар в группе или пустой спейсер
+  // Левая часть: аватар в группе или пустой спейсер. 34 px вместо 26 —
+  // лицо в кружке меньшего размера просто не узнаётся.
   const leftSlot = !isSent && (
     isGroup && senderMember
       ? <div className="flex-shrink-0 self-end mb-0.5">
-          <Avatar name={senderMember.name} id={senderMember.id} imageUrl={senderMember.image_url} size={26} />
+          <Avatar name={senderMember.name} id={senderMember.id} imageUrl={senderMember.image_url} size={34} />
         </div>
-      : <div className="w-[26px] flex-shrink-0" />
+      : <div className="w-[34px] flex-shrink-0" />
+  )
+
+  const mediaMeta = (
+    <div className="absolute bottom-1.5 right-2 flex items-center gap-1 bg-black/45 rounded-full px-2 py-0.5">
+      <span className="text-xs text-white">{time}</span>
+      {isSent && <Checks isRead={msg.is_read} white />}
+    </div>
   )
 
   if (msg.type === 'image') {
@@ -58,14 +77,9 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
         <div className="relative">
-          <CachedImg url={msg.text} alt="" loading="lazy" className="max-w-[220px] rounded-[18px] cursor-pointer block"
+          <CachedImg url={msg.text} alt="" loading="lazy" className="max-w-[240px] rounded-[20px] cursor-pointer block"
             onClick={() => setLightbox(true)} />
-          {isSent && (
-            <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
-              <span className="text-[10px] text-white/80">{time}</span>
-              <Checks isRead={msg.is_read} white />
-            </div>
-          )}
+          {mediaMeta}
         </div>
         {lightbox && (
           <ImageLightbox
@@ -92,12 +106,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
         {leftSlot}
         <div className="relative">
           <VideoThumb src={mediaSrc(msg.text)} poster={mediaSrc(msg.thumbnail_url)} onClick={() => setVideoOpen(true)} />
-          {isSent && (
-            <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 bg-black/30 rounded-full px-1.5 py-0.5">
-              <span className="text-[10px] text-white/80">{time}</span>
-              <Checks isRead={msg.is_read} white />
-            </div>
-          )}
+          {mediaMeta}
         </div>
         {videoOpen && <VideoLightbox src={mediaSrc(msg.text)} onClose={() => setVideoOpen(false)} />}
       </div>
@@ -108,17 +117,20 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
     return (
       <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
         {leftSlot}
-        <div className={`flex items-center gap-2 px-3.5 py-2.5 max-w-[260px] shadow-soft ${isSent ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-msg-out' : 'bg-bubbleIn text-bubbleIn-text rounded-msg-in'}`}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          </svg>
-          <audio src={mediaSrc(msg.text)} controls className="h-7 flex-1" style={{ minWidth: 0 }} />
-          {isSent && <Checks isRead={msg.is_read} white />}
+        <div className={`px-3 py-2 max-w-[280px] shadow-soft ${isSent ? 'bg-accent text-onAccent rounded-msg-out' : 'bg-bubbleIn text-bubbleIn-text rounded-msg-in'}`}>
+          <VoiceMessage src={mediaSrc(msg.text)} onAccent={isSent} />
+          <div className={`flex items-center gap-1 justify-end mt-1 ${isSent ? 'opacity-80' : 'text-muted'}`}>
+            <span className="text-xs">{time}</span>
+            {isSent && <Checks isRead={msg.is_read} white />}
+          </div>
         </div>
       </div>
     )
   }
+
+  // Сообщение, которое не расшифровывается: человеку не нужны ни «ключ», ни
+  // «E2EE» — нужно понять, что тут ничего не сломалось у него.
+  const undecryptable = (msg as any)._msgStatus === 'key_changed'
 
   return (
     <div className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
@@ -126,24 +138,58 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember }: Pr
 
       <div
         className={[
-          'max-w-[78%] px-4 py-2.5 text-lg font-semibold leading-relaxed break-words overflow-hidden shadow-soft',
+          'relative max-w-[78%] px-4 py-2.5 text-lg leading-relaxed break-words shadow-soft',
           isSent
-            ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-msg-out'
+            ? 'bg-accent text-onAccent rounded-msg-out'
             : 'bg-bubbleIn text-bubbleIn-text rounded-msg-in',
         ].join(' ')}
       >
         {isGroup && !isSent && msg.sender_name && (
-          <div className="text-sm font-extrabold text-accent mb-0.5">{msg.sender_name}</div>
+          <div
+            className="text-base font-bold mb-0.5"
+            style={{ color: nameColor(msg.sender_id || msg.writer || '', dark) }}
+          >
+            {msg.sender_name}
+          </div>
         )}
-        <span>{msg.text}</span>
-        {/* Индикатор статуса шифрования */}
-        {(msg as any)._msgStatus === 'unencrypted' && (
-          <span className="text-[10px] opacity-50 ml-1" title="Отправлено до включения E2EE">🔓</span>
+
+        {/* Цитата: на что отвечают */}
+        {msg.reply_to && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); if (msg.reply_to) onQuoteClick?.(msg.reply_to.id) }}
+            className="block w-full text-left mb-1.5 pl-2.5 py-1 rounded-lg border-l-[3px]"
+            style={{
+              borderColor: isSent ? 'rgba(255,255,255,.65)' : 'var(--accent)',
+              background: isSent ? 'rgba(255,255,255,.14)' : 'var(--bg)',
+            }}
+          >
+            <div className={`text-xs font-bold ${isSent ? '' : 'text-accent'}`}>
+              {msg.reply_to.sender_id === userId ? 'Вы' : (msg.reply_to.sender_name || 'Сообщение')}
+            </div>
+            <div className={`text-sm ellipsis ${isSent ? 'opacity-85' : 'text-muted'}`}>
+              {shortContent(msg.reply_to.type, msg.reply_to.text)}
+            </div>
+          </button>
         )}
-        {/* Время + галочки */}
-        <span className={`text-sm ml-1.5 align-bottom whitespace-nowrap font-bold ${isSent ? 'opacity-70' : 'text-muted'}`}>
-          {time}
-          {isSent && <Checks isRead={msg.is_read} white={isSent} />}
+
+        {undecryptable ? (
+          <span className={isSent ? 'italic opacity-85' : 'italic text-muted'}>
+            Это сообщение не открывается на этом телефоне
+          </span>
+        ) : (
+          <span>{msg.text}</span>
+        )}
+
+        {/* Распорка под время: короткое сообщение остаётся в одну строку,
+            длинное переносится, и время не прилипает к последнему слову. */}
+        <span className="inline-block align-bottom" style={{ width: isSent ? 62 : 40, height: 1 }} />
+
+        <span
+          className={`absolute bottom-1.5 right-3 flex items-center gap-1 whitespace-nowrap ${isSent ? 'opacity-85' : 'text-muted'}`}
+        >
+          <span className="text-xs">{time}</span>
+          {isSent && <Checks isRead={msg.is_read} white />}
         </span>
       </div>
     </div>

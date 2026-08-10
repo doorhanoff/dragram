@@ -91,6 +91,31 @@ class ChatsRepository(BaseRepository):
         res = await self.session.execute(query)
         return list(reversed(res.scalars().all()))
 
+    async def last_messages(self, chat_ids: list[uuid.UUID]) -> dict[uuid.UUID, MessagesOrm]:
+        """По одному последнему сообщению на чат — для превью в списке чатов.
+
+        DISTINCT ON, а не запрос на каждый чат: список чатов перечитывается
+        каждые 15 секунд, и N+1 здесь стоил бы дороже всего остального экрана.
+        """
+        if not chat_ids:
+            return {}
+        query = (
+            select(MessagesOrm)
+            .where(MessagesOrm.chat_id.in_(chat_ids))
+            .distinct(MessagesOrm.chat_id)
+            .order_by(MessagesOrm.chat_id, MessagesOrm.created_at.desc())
+        )
+        res = await self.session.execute(query)
+        return {m.chat_id: m for m in res.scalars().all()}
+
+    async def message_belongs_to_chat(self, message_id: uuid.UUID, chat_id: uuid.UUID) -> bool:
+        res = await self.session.execute(
+            select(func.count())
+            .select_from(MessagesOrm)
+            .where(MessagesOrm.id == message_id, MessagesOrm.chat_id == chat_id)
+        )
+        return res.scalar_one() > 0
+
     async def create_message(self, data: MessageDbSchema) -> MessagesOrm:
         stmt = insert(MessagesOrm).values(data.model_dump()).returning(MessagesOrm)
         res = await self.session.execute(stmt)

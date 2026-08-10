@@ -33,48 +33,49 @@ export default function Gate({ onUnlocked }: { onUnlocked: () => void }) {
     }
   }
 
-  const field = 'flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold'
-  const box   = 'h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]'
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg px-5">
-      <div className="w-full max-w-[400px]">
+    <div className="min-h-screen flex items-center justify-center bg-bg px-5 overflow-y-auto">
+      <div className="w-full max-w-[420px] py-8">
         <div className="text-center mb-7">
-          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-accent2 to-accent flex items-center justify-center shadow-pop">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-accent flex items-center justify-center shadow-pop">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent, #fff)" strokeWidth="2" strokeLinecap="round">
               <rect x="4" y="10" width="16" height="11" rx="2.5" />
               <path d="M8 10V7a4 4 0 0 1 8 0v3" />
             </svg>
           </div>
-          <h1 className="text-3xl font-black text-primary tracking-tight">Dragram</h1>
-          <p className="text-lg font-bold text-muted mt-1.5">Только для своих</p>
+          <h1 className="text-3xl font-bold text-primary tracking-tight">Dragram</h1>
+          <p className="text-lg text-muted mt-1.5">Только для своих</p>
         </div>
 
-        <form onSubmit={submit} className="flex flex-col gap-2.5">
-          <label className="text-sm font-bold text-muted px-1">
+        <form onSubmit={submit} className="flex flex-col gap-2">
+          <label className="text-md text-muted px-1" htmlFor="gate-birthday">
             День рождения Василия Ивановича
           </label>
-          <div className={box}>
-            <input value={birthday} onChange={e => setBirthday(e.target.value)}
-              placeholder="день и месяц" required maxLength={100}
-              autoComplete="off" className={field} />
-          </div>
+          {/* Пример формата прямо в подсказке: даже зная ответ, непонятно,
+              писать «16.08» или «16 августа». Сервер принимает и то и другое,
+              но человек об этом не знает. */}
+          <input id="gate-birthday" value={birthday} onChange={e => setBirthday(e.target.value)}
+            placeholder="например, 16.08" required maxLength={100}
+            autoComplete="off" className="field" />
 
-          <label className="text-sm font-bold text-muted px-1 mt-2">
+          <label className="text-md text-muted px-1 mt-3" htmlFor="gate-creator">
             Имя создателя мессенджера Dragram
           </label>
-          <div className={box}>
-            <input value={creator} onChange={e => setCreator(e.target.value)}
-              placeholder="фамилия, имя, отчество" required maxLength={200}
-              autoComplete="off" className={field} />
-          </div>
+          <input id="gate-creator" value={creator} onChange={e => setCreator(e.target.value)}
+            placeholder="например, Иванов Иван Иванович" required maxLength={200}
+            autoComplete="off" className="field" />
 
-          {error && <p className="text-sm font-bold text-red-500 text-center mt-1">{error}</p>}
+          {error && <p className="text-md font-bold text-danger text-center mt-1">{error}</p>}
 
-          <button type="submit" disabled={busy}
-            className="w-full mt-3 h-14 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl text-lg font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50">
+          <button type="submit" disabled={busy} className="btn btn-primary w-full mt-3" style={{ minHeight: 56 }}>
             {busy ? '…' : 'Войти'}
           </button>
+
+          {/* Из-за двери раньше не было выхода: не знаешь ответ — тупик. */}
+          <p className="text-md text-muted text-center leading-relaxed mt-4">
+            Не знаете ответ? Спросите у того, кто дал вам приложение — он подскажет.
+            Регистр букв, «ё» и лишние пробелы значения не имеют.
+          </p>
         </form>
       </div>
     </div>

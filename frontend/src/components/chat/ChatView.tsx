@@ -1,13 +1,15 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import {
-  IconPaperclip,
-  IconSend, IconMicrophone, IconPlayerStop, IconArrowLeft, IconChevronUp,
+  IconPaperclip, IconSend, IconMicrophone, IconArrowLeft, IconChevronUp,
+  IconX, IconTrash, IconArrowBackUp,
 } from '@tabler/icons-react'
-import { parseDate } from '../../utils'
-import MessageBubble from './MessageBubble'
+import { parseDate, fmtPresence, showToast } from '../../utils'
+import MessageBubble, { shortContent } from './MessageBubble'
+import MessageActions from './MessageActions'
+import ForwardModal from './ForwardModal'
 import Avatar from '../ui/Avatar'
-import type { Member } from '../../types'
 import ProfileModal from '../ui/ProfileModal'
+import { ask, say, sayError } from '../ui/dialogs'
 import type { Chat, Message } from '../../types'
 import { api } from '../../api'
 
@@ -29,34 +31,46 @@ function fmtDay(dt?: string): string {
   return d.toLocaleDateString('ru', { day: 'numeric', month: 'long' })
 }
 
+function fmtRecording(ms: number) {
+  const total = Math.floor(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
 interface Props {
   chatId: string | null
   chat?: Chat
   messages: Message[]
   setMessages: React.Dispatch<React.SetStateAction<Record<string, Message[]>>>
   userId: string
-  onSend: (text: string) => Promise<boolean>
+  onSend: (text: string, replyToId?: string | null) => Promise<boolean>
+  /** Переслать текст: App перешифрует его ключом чата-получателя — у каждого
+   *  чата ключ свой, и переложить блоб как есть нельзя. */
+  onForwardText?: (chatId: string, text: string) => Promise<void>
   onBack?: () => void
   onStartChat?: (userId: string) => void
 }
 
-export default function ChatView({ chatId, chat, messages, setMessages, userId, onSend, onBack, onStartChat }: Props) {
+export default function ChatView({ chatId, chat, messages, setMessages, userId, onSend, onForwardText, onBack, onStartChat }: Props) {
   const [text, setText]               = useState('')
-  const [activeMsg,  setActiveMsg]    = useState<string | null>(null)
+  const [actionMsg, setActionMsg]     = useState<Message | null>(null)
+  const [replyTo, setReplyTo]         = useState<Message | null>(null)
+  const [forwardMsg, setForwardMsg]   = useState<Message | null>(null)
   const [uploading, setUploading]     = useState<{ file: File; progress: number } | null>(null)
   const [profileId, setProfileId]     = useState<string | null>(null)
   const [hasMore,   setHasMore]       = useState(true)
   const [loadingMore,setLoadingMore]  = useState(false)
   const [recording, setRecording]     = useState(false)
-  const [pendingAudio, setPending]    = useState<{ file: File; url: string } | null>(null)
+  const [recordMs,  setRecordMs]      = useState(0)
   const [sendingAudio, setSendingAudio] = useState(false)
-  const bottomRef   = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef     = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef   = useRef<Blob[]>([])
+  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Запись отменена (палец уехал в сторону) — на отпускании не отправляем.
+  const recordCancelled = useRef(false)
   const isGroup     = (chat?.members?.length || 0) > 2
   const other       = chat?.members?.find(m => m.id !== userId)
 
@@ -70,13 +84,19 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
 
   useEffect(() => { if (chatId) api.markRead(chatId).catch(() => {}) }, [chatId])
 
+  // Смена чата не должна тащить за собой ответ и открытое меню из прежнего.
+  useEffect(() => { setReplyTo(null); setActionMsg(null); setForwardMsg(null) }, [chatId])
+
+  useEffect(() => () => { if (recordTimer.current) clearInterval(recordTimer.current) }, [])
+
   async function send() {
     if (!text.trim()) return
-    const ok = await onSend(text.trim())
+    const ok = await onSend(text.trim(), replyTo?.id || null)
     // Сокет мог быть в реконнекте — сообщение не ушло, текст не трогаем,
     // чтобы пользователь мог отправить повторно, а не набирать заново
     if (!ok) return
     setText('')
+    setReplyTo(null)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
@@ -114,33 +134,51 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
     try {
       const thumbnail = file.type.startsWith('video/') ? await getVideoThumbnail(file) : null
       await api.uploadMedia(chatId, file, (pct: number) => setUploading(prev => prev ? { ...prev, progress: pct } : null), thumbnail)
-    } catch (err: any) { alert('Ошибка: ' + err.message) }
+    } catch (err) { sayError('Не удалось отправить файл', err) }
     finally { setUploading(null) }
   }
 
-  async function toggleRecord() {
-    if (recording) { recorderRef.current?.stop(); return }
+  // ── Голосовое: удержанием, как во всех мессенджерах ───────────────────────
+  async function startRecording() {
+    if (recording) return
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null)
-    if (!stream) { alert('Нет доступа к микрофону'); return }
+    if (!stream) {
+      say('Нужен доступ к микрофону', 'Разрешите Dragram запись звука в настройках телефона — иначе голосовое записать не получится.')
+      return
+    }
     const rec = new MediaRecorder(stream)
-    recorderRef.current = rec; chunksRef.current = []
+    const startedAt = Date.now()
+    recorderRef.current = rec
+    chunksRef.current = []
+    recordCancelled.current = false
     rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-    rec.onstop = () => {
+    rec.onstop = async () => {
       stream.getTracks().forEach(t => t.stop())
+      if (recordTimer.current) { clearInterval(recordTimer.current); recordTimer.current = null }
+      const wasCancelled = recordCancelled.current
+      const durationMs = Date.now() - startedAt
       setRecording(false)
+      setRecordMs(0)
+      // Слишком короткое — это случайное касание, а не сообщение.
+      if (wasCancelled || durationMs < 700 || !chatId) return
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
       const file = new File([blob], 'voice.webm', { type: 'audio/webm' })
-      setPending({ file, url: URL.createObjectURL(blob) })
+      setSendingAudio(true)
+      try { await api.uploadMedia(chatId, file, () => {}) }
+      catch (err) { sayError('Не удалось отправить голосовое', err) }
+      finally { setSendingAudio(false) }
     }
-    rec.start(); setRecording(true)
+    rec.start()
+    setRecording(true)
+    setRecordMs(0)
+    recordTimer.current = setInterval(() => setRecordMs(Date.now() - startedAt), 200)
   }
 
-  async function sendAudio() {
-    if (!pendingAudio || !chatId) return
-    setSendingAudio(true)
-    try { await api.uploadMedia(chatId, pendingAudio.file, () => {}); URL.revokeObjectURL(pendingAudio.url); setPending(null) }
-    catch (err: any) { alert(err.message) }
-    finally { setSendingAudio(false) }
+  function stopRecording(cancel = false) {
+    if (!recording) return
+    recordCancelled.current = cancel
+    recorderRef.current?.stop()
+    if (cancel) showToast('Запись отменена')
   }
 
   async function loadMore() {
@@ -157,22 +195,49 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
     finally { setLoadingMore(false) }
   }
 
-  async function handleDelete(msgId?: string) {
+  async function handleDelete(msg: Message) {
+    const msgId = msg.id || (msg as any)._id
     if (!msgId || !chatId) return
-    if (!window.confirm('Удалить сообщение?')) return
+    const ok = await ask({
+      title: 'Удалить сообщение?',
+      text: 'Оно исчезнет и у собеседника. Вернуть его будет нельзя.',
+      confirmLabel: 'Удалить',
+      cancelLabel: 'Оставить',
+      danger: true,
+    })
+    if (!ok) return
     try {
       await api.deleteMessage(chatId, msgId)
       setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).filter(m => (m.id || (m as any)._id) !== msgId) }))
-    } catch (err: any) { alert(err.message) }
+    } catch (err) { sayError('Не удалось удалить сообщение', err) }
   }
+
+  async function copyText(msg: Message) {
+    try {
+      await navigator.clipboard.writeText(msg.text)
+      showToast('Скопировано')
+    } catch {
+      showToast('Не получилось скопировать')
+    }
+  }
+
+  const scrollToMessage = useCallback((messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`)
+    if (!el) { showToast('Это сообщение осталось выше — прокрутите ленту'); return }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.animate(
+      [{ background: 'var(--surface2)' }, { background: 'transparent' }],
+      { duration: 1200, easing: 'ease-out' },
+    )
+  }, [])
 
   if (!chatId || !chat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-bg gap-3">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#D0D0E0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
-        <p className="text-sm text-muted">Выберите чат</p>
+        <p className="text-md text-muted">Выберите чат</p>
       </div>
     )
   }
@@ -186,78 +251,87 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
     items.push({ type: 'msg', msg: m, key: (m.id || (m as any)._id || m.client_id || String(i)) })
   })
 
-  const title   = chatName(chat, userId)
-  const imgUrl  = isGroup ? chat.image_url : other?.image_url
+  const title    = chatName(chat, userId)
+  const imgUrl   = isGroup ? chat.image_url : other?.image_url
   const isOnline = !isGroup && other?.is_active
+  // Строка под именем есть ВСЕГДА — иначе шапка прыгает по высоте, а понять,
+  // ждать ли ответа сейчас, всё равно нельзя.
+  const subtitle = isGroup
+    ? `${chat.members?.length || 0} участников`
+    : fmtPresence(!!other?.is_active, other?.last_seen)
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg">
       {/* Header */}
-      <div className="bg-surface border-b border-border flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
+      <div className="bg-surface border-b border-border flex items-center gap-2 px-2 pt-2 pb-2 flex-shrink-0">
         {onBack && (
-          <button onClick={onBack} className="text-accent hover:opacity-70 transition-opacity md:hidden">
-            <IconArrowLeft size={24} stroke={2.4} />
+          <button onClick={onBack} aria-label="Назад" className="tap rounded-2xl text-accent md:hidden">
+            <IconArrowLeft size={26} stroke={2.2} />
           </button>
         )}
-        <div onClick={() => { if (!isGroup && other) setProfileId(other.id) }} className={!isGroup ? 'cursor-pointer' : ''}>
-          <Avatar name={title} id={chatId} imageUrl={imgUrl} isActive={isOnline} size={42} />
+        <div onClick={() => { if (!isGroup && other) setProfileId(other.id) }} className={`flex-shrink-0 ${!isGroup ? 'cursor-pointer' : ''}`}>
+          <Avatar name={title} id={chatId} imageUrl={imgUrl} isActive={isOnline} size={44} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-lg font-extrabold text-primary ellipsis">{title}</div>
-          {isOnline && (
-            <div className="flex items-center gap-1">
-              <span className="w-[5px] h-[5px] rounded-full bg-online" />
-              <span className="text-sm font-bold text-online">онлайн</span>
-            </div>
-          )}
+        <div className="flex-1 min-w-0 pl-1">
+          <div className="text-lg font-bold text-primary ellipsis">{title}</div>
+          <div className={`text-sm ellipsis ${isOnline ? 'text-online' : 'text-muted'}`}>{subtitle}</div>
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages — лента растёт снизу вверх: последнее сообщение всегда рядом
+          с полем ввода, а не прижато к шапке с пустотой под ним. */}
       <div
         ref={scrollerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-[18px] py-[14px] flex flex-col gap-3"
+        className="flex-1 min-h-0 overflow-y-auto px-[18px] py-[14px] flex flex-col justify-end gap-3"
         onScroll={() => {
           if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null }
-          setActiveMsg(null)
         }}
       >
         {/* Load more */}
         {hasMore && messages.length >= 50 && (
           <button onClick={loadMore} disabled={loadingMore}
-            className="self-center flex items-center gap-1 text-xs text-muted border border-border rounded-full px-3 py-1.5 hover:border-accent hover:text-accent transition-colors disabled:opacity-50">
-            <IconChevronUp size={12} stroke={2} />
+            className="self-center flex items-center gap-1 text-sm text-muted border border-border rounded-full px-4 py-2 hover:border-accent hover:text-accent transition-colors disabled:opacity-50">
+            <IconChevronUp size={14} stroke={2} />
             {loadingMore ? 'Загрузка…' : 'Загрузить ещё'}
           </button>
         )}
+
+        {messages.length === 0 && !uploading && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-8 gap-2">
+            <p className="text-xl font-bold text-primary">Здесь пока пусто</p>
+            <p className="text-md text-muted leading-relaxed">
+              Напишите первое сообщение — его прочитает только {isGroup ? 'эта группа' : (other?.name || 'собеседник')}.
+              Даже мы не видим, что вы пишете друг другу.
+            </p>
+          </div>
+        )}
+
         {items.map(item => {
           if (item.type === 'divider') {
             return (
               <div key={item.key} className="flex justify-center my-1">
-                <span className="text-xs font-extrabold text-muted whitespace-nowrap bg-surface2 px-3.5 py-1 rounded-full">{item.day}</span>
+                <span className="text-sm font-bold text-muted whitespace-nowrap bg-surface2 px-3.5 py-1 rounded-full">{item.day}</span>
               </div>
             )
           }
-          const isMine = (item.msg.writer || item.msg.sender_id) === userId
-          const msgId  = item.msg.id || (item.msg as any)._id
-          const isActive = activeMsg === item.key
+          const msgId = item.msg.id || (item.msg as any)._id
           const cancelLongPress = () => {
             if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null }
           }
           return (
             <div
+              id={msgId ? `msg-${msgId}` : undefined}
               key={item.key}
-              className={`group relative ${isMine ? 'no-callout' : ''}`}
-              onContextMenu={e => { if (isMine) e.preventDefault() }}
+              className="relative no-callout rounded-2xl"
+              onContextMenu={e => { e.preventDefault(); setActionMsg(item.msg) }}
               onTouchStart={e => {
-                if (!isMine) return
                 const touch = e.touches[0]
                 cancelLongPress()
                 longPressRef.current = {
                   x: touch.clientX,
                   y: touch.clientY,
                   timer: setTimeout(() => {
-                    setActiveMsg(prev => prev === item.key ? null : item.key)
+                    setActionMsg(item.msg)
                     longPressRef.current = null
                   }, 450),
                 }
@@ -271,90 +345,139 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
               }}
               onTouchEnd={cancelLongPress}
               onTouchCancel={cancelLongPress}
-              onClick={() => { if (activeMsg && !isMine) setActiveMsg(null) }}
             >
               <MessageBubble
                 msg={item.msg}
                 userId={userId}
                 isGroup={isGroup}
-                senderMember={isGroup && !isMine
+                senderMember={isGroup && (item.msg.sender_id || item.msg.writer) !== userId
                   ? chat?.members?.find(m => m.id === (item.msg.sender_id || item.msg.writer))
                   : undefined
                 }
+                onQuoteClick={scrollToMessage}
               />
-              {isMine && (
-                <button
-                  onClick={e => { e.stopPropagation(); setActiveMsg(null); handleDelete(msgId) }}
-                  className={[
-                    'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white',
-                    'flex items-center justify-center text-xs transition-all',
-                    // group-hover только на устройствах с настоящим hover (мышь) —
-                    // на тачскринах тап иногда "залипает" в hover-состоянии и кнопка удаления
-                    // оставалась бы видна без причины
-                    isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:scale-100 [@media(hover:hover)]:group-hover:pointer-events-auto',
-                  ].join(' ')}
-                  title="Удалить"
-                >×</button>
-              )}
             </div>
           )
         })}
+
         {uploading && (
           <div className="flex flex-row-reverse">
-            <div className="relative bg-accent-light rounded-xl overflow-hidden w-[200px] h-[130px] flex items-center justify-center">
-              <span className="text-sm text-accent-text font-medium">{uploading.progress}%</span>
+            <div className="relative bg-surface2 rounded-2xl overflow-hidden w-[200px] h-[130px] flex items-center justify-center">
+              <span className="text-md text-accent font-bold">{uploading.progress}%</span>
               <div className="absolute bottom-0 left-0 h-1 bg-accent transition-all" style={{ width: `${uploading.progress}%` }} />
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
+      {/* Ответ: на что отвечаем */}
+      {replyTo && (
+        <div className="bg-surface border-t border-border px-3 py-2 flex items-center gap-2 flex-shrink-0">
+          <IconArrowBackUp size={20} stroke={1.8} className="text-accent flex-shrink-0" />
+          <div className="flex-1 min-w-0 border-l-[3px] border-accent pl-2">
+            <div className="text-xs font-bold text-accent">
+              {(replyTo.sender_id || replyTo.writer) === userId ? 'Вы' : (replyTo.sender_name || 'Сообщение')}
+            </div>
+            <div className="text-sm text-muted ellipsis">{shortContent(replyTo.type, replyTo.text)}</div>
+          </div>
+          <button onClick={() => setReplyTo(null)} aria-label="Не отвечать" className="tap-sm rounded-xl text-muted">
+            <IconX size={20} stroke={2} />
+          </button>
+        </div>
+      )}
+
       {/* Input */}
-      <div className="bg-bg px-[14px] py-[10px] flex items-center gap-2.5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-        {pendingAudio ? (
+      <div className="bg-bg px-2 py-2 flex items-center gap-1 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+        {recording ? (
           <>
-            <audio src={pendingAudio.url} controls className="flex-1 h-9" />
-            <button onClick={() => { URL.revokeObjectURL(pendingAudio.url); setPending(null) }}
-              className="w-8 h-8 rounded-full bg-surface2 text-red-400 flex items-center justify-center text-xs">×</button>
-            <button onClick={sendAudio} disabled={sendingAudio}
-              className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent shadow-pop disabled:opacity-50">
-              <IconSend size={18} stroke={1.5} />
+            <button
+              onClick={() => stopRecording(true)}
+              className="tap rounded-2xl text-danger"
+              aria-label="Отменить запись"
+            >
+              <IconTrash size={24} stroke={1.9} />
             </button>
+            <div className="flex-1 flex items-center gap-2 px-2">
+              <span className="w-3 h-3 rounded-full bg-danger animate-pulse flex-shrink-0" />
+              <span className="text-lg font-bold text-primary tabular-nums">{fmtRecording(recordMs)}</span>
+              <span className="text-md text-muted ellipsis">Отпустите, чтобы отправить</span>
+            </div>
           </>
         ) : (
           <>
-            <label className={`text-muted flex items-center justify-center cursor-pointer transition-colors flex-shrink-0 ${uploading ? 'pointer-events-none opacity-40' : 'hover:text-accent'}`}>
+            <label
+              className={`tap rounded-2xl cursor-pointer flex-shrink-0 ${uploading ? 'pointer-events-none opacity-40 text-muted' : 'text-muted hover:text-accent'}`}
+              aria-label="Прикрепить файл"
+            >
               <IconPaperclip size={24} stroke={2} />
               <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime,audio/*" hidden onChange={handleFile} />
             </label>
-            <div className="flex-1 bg-surface rounded-[22px] flex items-center gap-1 pl-[18px] pr-2 py-[6px] shadow-soft">
+            <div className="flex-1 bg-surface rounded-[20px] flex items-center pl-4 pr-2 py-1 shadow-soft">
               <textarea
                 ref={textareaRef}
                 value={text}
-                onChange={e => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px' }}
+                onChange={e => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px' }}
                 onKeyDown={onKey}
                 placeholder="Сообщение…"
                 rows={1}
-                className="flex-1 bg-transparent outline-none resize-none text-lg font-semibold text-primary placeholder:text-muted max-h-[100px] disabled:cursor-not-allowed py-1.5"
+                className="flex-1 bg-transparent outline-none resize-none text-lg text-primary placeholder:text-muted max-h-[110px] py-2"
               />
-              <button
-                onClick={toggleRecord}
-                className={`w-8 h-8 flex items-center justify-center transition-colors flex-shrink-0 ${recording ? 'text-red-500' : 'text-muted hover:text-accent'}`}
-              >
-                {recording ? <IconPlayerStop size={19} stroke={1.8} /> : <IconMicrophone size={19} stroke={1.8} />}
-              </button>
             </div>
-            <button
-              onClick={send}
-              disabled={!text.trim()}
-              className="w-11 h-11 rounded-full bg-gradient-to-br from-accent2 to-accent flex items-center justify-center text-onAccent disabled:opacity-40 transition-opacity flex-shrink-0 shadow-pop"
-            >
-              <IconSend size={18} stroke={1.5} />
-            </button>
+            {/* Одна кнопка, которая меняется: пусто — микрофон, есть текст —
+                самолётик в полную силу цвета. Раньше их было две, и человек
+                жал ту, что заметнее, — микрофон. */}
+            {text.trim() ? (
+              <button
+                onClick={send}
+                aria-label="Отправить"
+                className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-onAccent flex-shrink-0 shadow-pop"
+              >
+                <IconSend size={20} stroke={1.8} />
+              </button>
+            ) : (
+              <button
+                onPointerDown={e => { e.preventDefault(); startRecording() }}
+                onPointerUp={() => stopRecording(false)}
+                onPointerLeave={() => stopRecording(true)}
+                onPointerCancel={() => stopRecording(true)}
+                onContextMenu={e => e.preventDefault()}
+                disabled={sendingAudio}
+                aria-label="Записать голосовое: удерживайте"
+                className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center text-accent flex-shrink-0 disabled:opacity-50 no-callout"
+              >
+                <IconMicrophone size={22} stroke={1.9} />
+              </button>
+            )}
           </>
         )}
       </div>
+
+      {actionMsg && (
+        <MessageActions
+          canDelete={(actionMsg.sender_id || actionMsg.writer) === userId}
+          canForward={actionMsg.type !== 'text' || !!onForwardText}
+          canCopy={actionMsg.type === 'text'}
+          onClose={() => setActionMsg(null)}
+          onReply={() => { setReplyTo(actionMsg); setActionMsg(null); textareaRef.current?.focus() }}
+          onCopy={() => { copyText(actionMsg); setActionMsg(null) }}
+          onForward={() => { setForwardMsg(actionMsg); setActionMsg(null) }}
+          onDelete={() => { const m = actionMsg; setActionMsg(null); handleDelete(m) }}
+        />
+      )}
+
+      {forwardMsg && (
+        <ForwardModal
+          userId={userId}
+          onClose={() => setForwardMsg(null)}
+          onForward={targetChatId => forwardMsg.type === 'text'
+            ? onForwardText!(targetChatId, forwardMsg.text)
+            : api.forwardMessage(targetChatId, {
+                text: forwardMsg.text,
+                type: forwardMsg.type,
+                thumbnail_url: forwardMsg.thumbnail_url || null,
+              })}
+        />
+      )}
 
       {profileId && (
         <ProfileModal

@@ -9,42 +9,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Цвета акцента и серого в СВЕТЛЫХ палитрах подобраны по WCAG 2.1: белый текст
+   на кнопке и сам акцент как текст на фоне дают не меньше 4,5:1. Прежние
+   значения давали 2,9:1 и 3,1:1 — вдвое ниже нормы, и первым это замечает
+   именно пожилой глаз. Тон остался тем же, просто глубже.
+
+   Замеры (текст/фон → контраст):
+     hearth  #AC5226 на белом 5,26 · на фоне 4,82 | muted #7A6650 на фоне 5,00
+     forest  #4C6B3C на белом 6,04 · на фоне 5,43 | muted #5C6B54 на фоне 5,12
+     sky     #3D6478 на белом 6,38 · на фоне 5,81 | muted #566670 на фоне 5,42
+   В тёмных темах контраст и так был 5,1–7,4:1 — их не трогаем.
+
+   --accent2 в светлых темах равен --accent намеренно: раньше это был светлый
+   конец градиента на кнопках, и он всегда проваливал контраст. Градиентов
+   больше нет (см. .btn-primary). */
 @layer base {
   :root, [data-palette="hearth"] {
-    --bg:#FAF4EC; --surface:#FFFFFF; --surface2:#F6DDC9; --text:#3A2A1E; --muted:#9C8770;
-    --accent:#D9824E; --accent2:#E89B6A; --on-accent:#FFFFFF; --border:#F0E4D4;
-    --nav:rgba(255,255,255,.85); --badge:#D9824E; --bubble-in:#FFFFFF; --bubble-in-text:#3A2A1E;
+    --bg:#FAF4EC; --surface:#FFFFFF; --surface2:#F6DDC9; --text:#3A2A1E; --muted:#7A6650;
+    --accent:#AC5226; --accent2:#AC5226; --on-accent:#FFFFFF; --border:#E8D8C4;
+    --nav:rgba(255,255,255,.85); --badge:#AC5226; --bubble-in:#FFFFFF; --bubble-in-text:#3A2A1E;
     --shadow:rgba(120,70,30,.14); --sidebar:#2A2118;
+    --online:#2E7247; --danger:#C0392B;
   }
   [data-palette="hearth"][data-theme="dark"] {
-    --bg:#211C18; --surface:#2E2823; --surface2:#3A3024; --text:#F1E7DC; --muted:#9A8B79;
-    --accent:#E89B6A; --accent2:#DD8453; --on-accent:#2A1A10; --border:#332B23;
+    --bg:#211C18; --surface:#2E2823; --surface2:#3A3024; --text:#F1E7DC; --muted:#A79683;
+    --accent:#E89B6A; --accent2:#E89B6A; --on-accent:#2A1A10; --border:#3B322A;
     --nav:rgba(38,32,26,.92); --badge:#E89B6A; --bubble-in:#2E2823; --bubble-in-text:#F1E7DC;
     --shadow:rgba(0,0,0,.45); --sidebar:#171310;
+    --online:#6FC38C; --danger:#F0796B;
   }
   [data-palette="forest"] {
-    --bg:#F0F4EE; --surface:#FFFFFF; --surface2:#DEE9D7; --text:#2C342A; --muted:#7E8C76;
-    --accent:#6F8F5C; --accent2:#88A876; --on-accent:#FFFFFF; --border:#E2EADC;
-    --nav:rgba(255,255,255,.85); --badge:#6F8F5C; --bubble-in:#FFFFFF; --bubble-in-text:#2C342A;
+    --bg:#F0F4EE; --surface:#FFFFFF; --surface2:#DEE9D7; --text:#2C342A; --muted:#5C6B54;
+    --accent:#4C6B3C; --accent2:#4C6B3C; --on-accent:#FFFFFF; --border:#D7E2D0;
+    --nav:rgba(255,255,255,.85); --badge:#4C6B3C; --bubble-in:#FFFFFF; --bubble-in-text:#2C342A;
     --shadow:rgba(60,90,50,.14); --sidebar:#1E241B;
+    --online:#2E7247; --danger:#C0392B;
   }
   [data-palette="forest"][data-theme="dark"] {
-    --bg:#1B211A; --surface:#283024; --surface2:#344029; --text:#ECF1E8; --muted:#8FA083;
-    --accent:#88A876; --accent2:#6F8F5C; --on-accent:#16200F; --border:#2E382A;
+    --bg:#1B211A; --surface:#283024; --surface2:#344029; --text:#ECF1E8; --muted:#9BAC8F;
+    --accent:#88A876; --accent2:#88A876; --on-accent:#16200F; --border:#36412F;
     --nav:rgba(32,40,28,.92); --badge:#88A876; --bubble-in:#283024; --bubble-in-text:#ECF1E8;
     --shadow:rgba(0,0,0,.45); --sidebar:#141812;
+    --online:#6FC38C; --danger:#F0796B;
   }
   [data-palette="sky"] {
-    --bg:#F1F5F7; --surface:#FFFFFF; --surface2:#DDE9EE; --text:#283238; --muted:#7C8C94;
-    --accent:#5E89A0; --accent2:#7FA6BA; --on-accent:#FFFFFF; --border:#E2EBEF;
-    --nav:rgba(255,255,255,.85); --badge:#5E89A0; --bubble-in:#FFFFFF; --bubble-in-text:#283238;
+    --bg:#F1F5F7; --surface:#FFFFFF; --surface2:#DDE9EE; --text:#283238; --muted:#566670;
+    --accent:#3D6478; --accent2:#3D6478; --on-accent:#FFFFFF; --border:#D6E3E9;
+    --nav:rgba(255,255,255,.85); --badge:#3D6478; --bubble-in:#FFFFFF; --bubble-in-text:#283238;
     --shadow:rgba(50,80,95,.14); --sidebar:#1A2226;
+    --online:#2E7247; --danger:#C0392B;
   }
   [data-palette="sky"][data-theme="dark"] {
-    --bg:#181F23; --surface:#232E33; --surface2:#2E3C43; --text:#E8EFF2; --muted:#8498A0;
-    --accent:#7FA6BA; --accent2:#5E89A0; --on-accent:#0E1A20; --border:#2A363B;
+    --bg:#181F23; --surface:#232E33; --surface2:#2E3C43; --text:#E8EFF2; --muted:#90A4AC;
+    --accent:#7FA6BA; --accent2:#7FA6BA; --on-accent:#0E1A20; --border:#313E44;
     --nav:rgba(28,36,40,.92); --badge:#7FA6BA; --bubble-in:#232E33; --bubble-in-text:#E8EFF2;
     --shadow:rgba(0,0,0,.45); --sidebar:#0F1416;
+    --online:#6FC38C; --danger:#F0796B;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -67,8 +87,67 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 
+/* Один главный элемент управления и один вторичный на всё приложение.
+   Раньше «Создать» в новой публикации и «Создать» в новом альбоме выглядели
+   как кнопки из разных программ. */
+@layer components {
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px; padding: 0 20px; border-radius: 16px;
+    font-weight: 700; font-size: 1rem; line-height: 1.2;
+    transition: opacity .15s ease, background-color .15s ease;
+    cursor: pointer;
+  }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn-primary   { background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 20px -12px var(--shadow); }
+  .btn-secondary { background: var(--surface2); color: var(--text); }
+  .btn-danger    { background: transparent; color: var(--danger); }
+  @media (hover: hover) {
+    .btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled) { opacity: .88; }
+  }
+
+  /* Строка списка настроек: иконка — подпись — стрелка. */
+  .row-item {
+    display: flex; align-items: center; gap: 14px;
+    width: 100%; min-height: 56px; padding: 10px 16px;
+    border-radius: 16px; text-align: left;
+    background: var(--bg); color: var(--text);
+    transition: background-color .15s ease;
+  }
+  @media (hover: hover) { .row-item:hover { background: var(--surface2); } }
+
+  .field {
+    width: 100%; min-height: 52px; padding: 0 16px;
+    border-radius: 16px; background: var(--surface);
+    border: 1px solid var(--border); color: var(--text);
+    font-size: 1rem; font-weight: 500; outline: none;
+  }
+  .field:focus { border-color: var(--accent); }
+}
+
 @layer utilities {
   .scrollbar-none::-webkit-scrollbar { display: none; }
+  /* Область нажатия 48×48 вокруг маленькой иконки — рекомендация Google для
+     Android, и это для людей с обычной моторикой. Сама иконка не растёт. */
+  .tap {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 48px; min-height: 48px;
+  }
+  .tap-sm { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+  /* Шторка снизу и полноэкранный раздел — вместо окошка, подвешенного
+     посреди экрана: на телефоне такого нигде больше нет. */
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: flex; align-items: flex-end; }
+  .sheet {
+    width: 100%; max-height: 88dvh; display: flex; flex-direction: column;
+    background: var(--surface); border-radius: 24px 24px 0 0;
+    animation: sheet-up .22s cubic-bezier(.2,.8,.3,1);
+  }
+  @keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @media (min-width: 768px) {
+    .sheet-backdrop { align-items: center; justify-content: center; padding: 16px; }
+    .sheet { max-width: 480px; border-radius: 24px; animation: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
   .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Safe area insets для iOS (вырез, нижний бар навигации) */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }

@@ -42,13 +42,13 @@ export default function VideoLightbox({ src, onClose }: Props) {
         <button
           onClick={e => { e.stopPropagation(); downloadUrl(src) }}
           title="Сохранить"
-          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
         >
           <IconDownload size={17} stroke={1.8} />
         </button>
         <button
           onClick={close}
-          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
         >
           <IconX size={18} stroke={2} />
         </button>

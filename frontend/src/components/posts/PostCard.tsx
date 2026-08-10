@@ -29,8 +29,10 @@ export default function PostCard({ post, onClick }: Props) {
   const [liked,   setLiked]   = useState((post as any).is_liked ?? false)
   const [saved,   setSaved]   = useState((post as any).is_bookmarked ?? false)
   const [likes,   setLikes]   = useState((post as any).likes_count ?? 0)
+  const comments = (post as any).comments_count ?? 0
   const [lightbox,setLightbox]= useState<number | null>(null)
   const [videoOpen,setVideoOpen] = useState(false)
+  const [portrait,setPortrait] = useState(false)
 
   async function handleLike(e: React.MouseEvent) {
     e.stopPropagation()
@@ -67,18 +69,28 @@ export default function PostCard({ post, onClick }: Props) {
           <span className="text-sm font-bold text-muted ml-auto">{fmtAgo(post.created_at)}</span>
         </div>
 
-        {/* Cover */}
+        {/* Cover. Пропорция по содержимому, а не полоса в 200 px на всех:
+            вертикальная фотография вписывалась в широкую полосу и обрастала
+            пустыми полями по бокам. */}
         {(coverImg || coverVid) && (
           <div
             className="w-full overflow-hidden relative flex items-center justify-center"
-            style={{ height: 200, background: 'var(--surface2)' }}
+            style={{ aspectRatio: portrait ? '4 / 5' : '16 / 9', background: 'var(--surface2)' }}
           >
             {coverImg ? (
               <button
                 className="w-full h-full focus:outline-none flex items-center justify-center"
                 onClick={e => { e.stopPropagation(); setLightbox(0) }}
               >
-                <CachedImg url={coverImg} alt="" className="max-w-full max-h-full w-full h-full object-contain hover:opacity-95 transition-opacity" />
+                <CachedImg
+                  url={coverImg}
+                  alt=""
+                  className="w-full h-full object-cover hover:opacity-95 transition-opacity"
+                  onLoad={(e: any) => {
+                    const img = e.currentTarget
+                    if (img.naturalHeight > img.naturalWidth) setPortrait(true)
+                  }}
+                />
               </button>
             ) : (
               <button
@@ -116,22 +128,31 @@ export default function PostCard({ post, onClick }: Props) {
             </p>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center gap-5 border-t border-border pt-[11px]">
-            <button className={`flex items-center gap-1.5 text-md font-bold transition-colors ${liked ? 'text-[#E24B4A]' : 'text-muted hover:text-[#E24B4A]'}`} onClick={handleLike}>
-              <IconHeart size={20} stroke={1.8} fill={liked ? '#E24B4A' : 'none'} />
-              <span>{likes || ''}</span>
+          {/* Actions. Числа вместо слов: по подписи «комментарии» не видно
+              ни сколько их, ни сохранён ли уже пост. Ноль показываем нулём,
+              а не пустотой. Если комментариев нет — зовём написать первый. */}
+          <div className="flex items-center gap-1 border-t border-border pt-1.5">
+            <button
+              className={`tap gap-1.5 rounded-2xl text-md font-bold transition-colors px-2 ${liked ? 'text-danger' : 'text-muted hover:text-danger'}`}
+              onClick={handleLike}
+              aria-label={liked ? 'Убрать отметку «нравится»' : 'Нравится'}
+            >
+              <IconHeart size={22} stroke={1.8} fill={liked ? 'var(--danger)' : 'none'} />
+              <span className="tabular-nums">{likes}</span>
             </button>
             <button
-              className="flex items-center gap-1.5 text-md font-bold text-muted hover:text-primary transition-colors"
+              className="tap gap-1.5 rounded-2xl text-md font-bold text-muted hover:text-primary transition-colors px-2"
               onClick={e => { e.stopPropagation(); onClick() }}
             >
-              <IconMessageCircle size={20} stroke={1.8} />
-              <span>комментарии</span>
+              <IconMessageCircle size={22} stroke={1.8} />
+              <span className="tabular-nums">{comments > 0 ? comments : 'Прокомментировать'}</span>
             </button>
-            <button className={`flex items-center gap-1.5 text-md font-bold transition-colors ml-auto ${saved ? 'text-accent' : 'text-muted hover:text-accent'}`} onClick={handleBookmark}>
-              <IconBookmark size={19} stroke={1.8} fill={saved ? 'var(--accent)' : 'none'} />
-              <span>сохранить</span>
+            <button
+              className={`tap rounded-2xl transition-colors ml-auto px-2 ${saved ? 'text-accent' : 'text-muted hover:text-accent'}`}
+              onClick={handleBookmark}
+              aria-label={saved ? 'Убрать из сохранённых' : 'Сохранить'}
+            >
+              <IconBookmark size={21} stroke={1.8} fill={saved ? 'var(--accent)' : 'none'} />
             </button>
           </div>
         </div>

@@ -8,6 +8,7 @@ import Avatar from '../ui/Avatar'
 import CachedImg from '../ui/CachedImg'
 import AddMemberModal from './AddMemberModal'
 import { downloadUrl, showToast, parseDate } from '../../utils'
+import { ask } from '../ui/dialogs'
 import { useBackHandler } from '../../hooks/useBackHandler'
 import { withCache } from '../../dataCache'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
@@ -128,7 +129,14 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   async function deleteSelected() {
     if (!materials || selected.size === 0) return
     const count = selected.size
-    if (!confirm(`Удалить ${count} ${count === 1 ? 'файл' : 'файла(ов)'} из альбома? Отменить будет нельзя.`)) return
+    const ok = await ask({
+      title: count === 1 ? 'Удалить файл из альбома?' : `Удалить ${count} файла(ов) из альбома?`,
+      text: 'Их увидят все участники альбома, и вернуть удалённое будет нельзя.',
+      confirmLabel: 'Удалить',
+      cancelLabel: 'Оставить',
+      danger: true,
+    })
+    if (!ok) return
     setDeleting(true)
     const failed: string[] = []
     try {
@@ -170,68 +178,72 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   return (
     <div className="flex-1 min-w-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-3 gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={onBack} className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-accent hover:bg-surface flex-shrink-0">
-              <IconArrowLeft size={20} stroke={2.2} />
-            </button>
-            <h1 className="text-2xl font-black text-primary tracking-tight truncate">{album?.name || 'Альбом'}</h1>
-          </div>
-          {selectMode ? (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-sm font-bold text-muted">{selected.size ? `Выбрано: ${selected.size}` : 'Выберите файлы'}</span>
-              <button
-                onClick={downloadSelected}
-                disabled={selected.size === 0 || downloading}
-                className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                <IconDownload size={16} stroke={1.8} />
-                {downloading ? 'Скачивание…' : `Скачать${selected.size ? ` (${selected.size})` : ''}`}
-              </button>
-              <button
-                onClick={deleteSelected}
-                disabled={selected.size === 0 || deleting}
-                title="Удалить выбранные"
-                className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-red-500 hover:border-red-500 transition-colors disabled:opacity-50"
-              >
-                <IconTrash size={16} stroke={1.8} />
-                <span className="hidden sm:inline">{deleting ? 'Удаление…' : 'Удалить'}</span>
-              </button>
-              <button
-                onClick={() => { setSelectMode(false); setSelected(new Set()) }}
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-muted hover:bg-surface flex-shrink-0"
-              >
-                <IconX size={18} stroke={2} />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => setShowAddMember(true)}
-                className="flex items-center gap-1.5 border border-border bg-surface rounded-2xl px-3.5 py-2.5 text-sm font-extrabold text-primary hover:border-accent transition-colors"
-              >
-                <IconUserPlus size={16} stroke={1.8} />
-                <span className="hidden sm:inline">Добавить</span>
-              </button>
-              <button
-                onClick={() => fileInput.current?.click()}
-                disabled={uploading}
-                className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                <IconUpload size={16} stroke={1.5} />
-                <span className="hidden sm:inline">{uploading ? 'Загрузка…' : 'Загрузить'}</span>
-              </button>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                hidden
-                onChange={e => onFiles(e.target.files)}
-              />
-            </div>
-          )}
+        <div className="flex items-center mb-3 gap-2">
+          <button onClick={onBack} aria-label="Назад" className="md:hidden tap rounded-2xl text-accent flex-shrink-0">
+            <IconArrowLeft size={26} stroke={2.2} />
+          </button>
+          <h1 className="text-3xl font-bold text-primary tracking-tight truncate flex-1 min-w-0">{album?.name || 'Альбом'}</h1>
         </div>
+
+        {selectMode ? (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="text-md font-bold text-muted flex-1 min-w-0">
+              {selected.size ? `Выбрано: ${selected.size}` : 'Отметьте файлы'}
+            </span>
+            <button onClick={downloadSelected} disabled={selected.size === 0 || downloading} className="btn btn-primary">
+              <IconDownload size={20} stroke={1.8} />
+              {downloading ? 'Скачиваем…' : 'Скачать'}
+            </button>
+            <button
+              onClick={deleteSelected}
+              disabled={selected.size === 0 || deleting}
+              className="btn btn-secondary"
+              style={{ color: 'var(--danger)' }}
+            >
+              <IconTrash size={20} stroke={1.8} />
+              {deleting ? 'Удаляем…' : 'Удалить'}
+            </button>
+            <button
+              onClick={() => { setSelectMode(false); setSelected(new Set()) }}
+              aria-label="Выйти из режима выбора"
+              className="tap rounded-2xl text-muted"
+            >
+              <IconX size={24} stroke={2} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <button
+              onClick={() => fileInput.current?.click()}
+              disabled={uploading}
+              className="btn btn-primary"
+            >
+              <IconUpload size={20} stroke={1.8} />
+              {uploading ? 'Загружаем…' : 'Загрузить'}
+            </button>
+            {/* Обычная кнопка вместо подсказки 10 px: долгое нажатие остаётся
+                ускорителем для тех, кто его знает, но пожилой человек его не
+                пробует — он боится «зажать не то». */}
+            {materials !== null && materials.length > 0 && (
+              <button onClick={() => setSelectMode(true)} className="btn btn-secondary">
+                <IconChecks size={20} stroke={1.8} />
+                Выбрать
+              </button>
+            )}
+            <button onClick={() => setShowAddMember(true)} className="btn btn-secondary">
+              <IconUserPlus size={20} stroke={1.8} />
+              <span className="hidden sm:inline">Добавить людей</span>
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              hidden
+              onChange={e => onFiles(e.target.files)}
+            />
+          </div>
+        )}
 
         {album?.members && album.members.length > 0 && (
           <div className="flex items-center gap-1.5 mb-5">
@@ -241,12 +253,12 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
                 <Avatar key={m.id} name={m.name} id={m.id} imageUrl={m.image_url} size={24} className="ring-2 ring-surface" />
               ))}
             </div>
-            <span className="text-xs text-muted ml-1">{album.members.length} участник{album.members.length === 1 ? '' : album.members.length < 5 ? 'а' : 'ов'}</span>
+            <span className="text-sm text-muted ml-1">{album.members.length} участник{album.members.length === 1 ? '' : album.members.length < 5 ? 'а' : 'ов'}</span>
           </div>
         )}
 
         {materials === null && (
-          <div className="text-center text-sm text-muted py-16">Загрузка…</div>
+          <div className="text-center text-md text-muted py-16">Загрузка…</div>
         )}
 
         {materials !== null && materials.length === 0 && (
@@ -254,13 +266,9 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
             <div className="w-16 h-16 rounded-2xl bg-surface2 flex items-center justify-center mx-auto mb-4">
               <IconUpload size={28} stroke={1.5} className="text-accent" />
             </div>
-            <p className="text-primary font-extrabold mb-1">Здесь пока пусто</p>
+            <p className="text-xl font-bold text-primary mb-1">Здесь пока пусто</p>
             <p className="text-md font-semibold text-muted">Загрузите первые фото и видео</p>
           </div>
-        )}
-
-        {!selectMode && materials !== null && materials.length > 0 && (
-          <p className="text-xs text-muted mb-3">Долгое нажатие на файл — выбрать несколько и скачать</p>
         )}
 
         <div className="flex flex-col gap-5">
@@ -324,14 +332,14 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
             <button
               onClick={() => downloadUrl(mediaSrc(active.link), active.link.split('/').pop())}
               title="Скачать"
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20"
+              className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25"
             >
               <IconDownload size={20} stroke={1.5} />
             </button>
             <button
               onClick={() => setActive(null)}
               title="Закрыть"
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20"
+              className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25"
             >
               <IconX size={20} stroke={1.5} />
             </button>

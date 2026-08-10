@@ -17,9 +17,10 @@ router = APIRouter(
 def _post_from_dict(d: dict) -> PostsResponse:
     orm = d["orm"]
     data = PostsResponse.model_validate(orm)
-    data.likes_count   = d["likes_count"]
-    data.is_liked      = d["is_liked"]
-    data.is_bookmarked = d["is_bookmarked"]
+    data.likes_count    = d["likes_count"]
+    data.comments_count = d["comments_count"]
+    data.is_liked       = d["is_liked"]
+    data.is_bookmarked  = d["is_bookmarked"]
     return data
 
 

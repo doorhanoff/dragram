@@ -18,25 +18,51 @@ export default {
         border:   'var(--border)',
         primary:  'var(--text)',
         muted:    'var(--muted)',
-        online:   '#3E8E5A',
+        online:   'var(--online)',
+        danger:   'var(--danger)',
         badge:    'var(--badge)',
         bubbleIn: { DEFAULT: 'var(--bubble-in)', text: 'var(--bubble-in-text)' },
         nav:      'var(--nav)',
       },
+      /* Шкала была сдвинута на два шага вниз: текст сообщений 14 px, подписи
+         вкладок 9 px. В Telegram и WhatsApp сообщение — 16–17 px, подписи
+         вкладок — 12 px. Ниже 12 px не опускаемся нигде.
+
+         2xl и 3xl раньше НЕ переопределялись и оставались стандартными
+         (24 и 30 px) — отсюда и брался разрыв: «Чаты» набрано 30 px, а имя
+         человека под ним 14 px. Теперь заголовки тоже в шкале. */
       fontSize: {
-        '2xs': ['0.5625rem', { lineHeight: '0.75rem' }],
-        xs:    ['0.625rem',  { lineHeight: '0.875rem' }],
-        sm:    ['0.6875rem', { lineHeight: '1rem' }],
-        base:  ['0.75rem',   { lineHeight: '1.125rem' }],
-        md:    ['0.8125rem', { lineHeight: '1.25rem' }],
-        lg:    ['0.875rem',  { lineHeight: '1.375rem' }],
-        xl:    ['0.9375rem', { lineHeight: '1.375rem' }],
+        '2xs': ['0.75rem',   { lineHeight: '1rem' }],      // 12 — подписи вкладок
+        xs:    ['0.75rem',   { lineHeight: '1rem' }],      // 12 — минимум в интерфейсе
+        sm:    ['0.8125rem', { lineHeight: '1.125rem' }],  // 13
+        base:  ['0.875rem',  { lineHeight: '1.25rem' }],   // 14
+        md:    ['0.9375rem', { lineHeight: '1.375rem' }],  // 15 — превью, пояснения
+        lg:    ['1rem',      { lineHeight: '1.5rem' }],    // 16 — сообщения, имена
+        xl:    ['1.0625rem', { lineHeight: '1.5rem' }],    // 17
+        '2xl': ['1.375rem',  { lineHeight: '1.75rem' }],   // 22
+        '3xl': ['1.5rem',    { lineHeight: '1.875rem' }],  // 24 — заголовки разделов
       },
+      /* Два начертания вместо пяти вперемешку. Разметку не переписываем:
+         достаточно свести semibold/bold/extrabold/black к двум значениям —
+         обычному 500 и выделенному 700. */
+      fontWeight: {
+        normal:    '500',
+        medium:    '500',
+        semibold:  '500',
+        bold:      '700',
+        extrabold: '700',
+        black:     '700',
+      },
+      /* Два радиуса: 16 px для контролов, 24 px для карточек. */
       borderRadius: {
-        icon: '12px',
-        msg:  '22px',
-        'msg-in':  '22px 22px 22px 7px',
-        'msg-out': '22px 22px 7px 22px',
+        lg:   '16px',
+        xl:   '16px',
+        '2xl':'16px',
+        '3xl':'24px',
+        icon: '16px',
+        msg:  '20px',
+        'msg-in':  '20px 20px 20px 6px',
+        'msg-out': '20px 20px 6px 20px',
         card: '24px',
       },
       boxShadow: {

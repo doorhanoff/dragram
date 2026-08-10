@@ -26,9 +26,10 @@ class PostsResponse(BaseModel):
     created_by_id: uuid.UUID | None
     created_by: AuthorShort | None = None
     created_at: datetime.datetime
-    likes_count:   int  = 0
-    is_liked:      bool = False
-    is_bookmarked: bool = False
+    likes_count:    int  = 0
+    comments_count: int  = 0
+    is_liked:       bool = False
+    is_bookmarked:  bool = False
 
     @field_validator('materials', mode='before')
     @classmethod

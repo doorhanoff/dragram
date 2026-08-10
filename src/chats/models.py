@@ -31,10 +31,25 @@ class MessagesOrm(Base):
     sender_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     is_read: Mapped[bool] = mapped_column(default=False)
 
+    # Ответ на конкретное сообщение. Хранится только идентификатор — текст
+    # остаётся зашифрованным там же, где и был, и сервер по-прежнему не знает,
+    # что процитировано. SET NULL, а не CASCADE: удаление исходного сообщения
+    # не должно уносить с собой все ответы на него.
+    reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey('messages.id', ondelete='SET NULL'), nullable=True
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chat:   Mapped["ChatsOrm"] = relationship("ChatsOrm", back_populates="messages")
     sender: Mapped["UsersOrm"] = relationship("UsersOrm", foreign_keys=[sender_id], lazy="selectin")
+    # join_depth=1: цитата нужна на один уровень. Без ограничения SQLAlchemy
+    # тянул бы цепочку «ответ на ответ на ответ…» целиком, а показываем мы
+    # всё равно одну строку.
+    reply_to: Mapped["MessagesOrm | None"] = relationship(
+        "MessagesOrm", remote_side=[id], lazy="joined", join_depth=1,
+        foreign_keys=[reply_to_id],
+    )
 
 
 

@@ -18,12 +18,12 @@ import Sidebar           from './components/layout/Sidebar'
 import BottomNav         from './components/layout/BottomNav'
 import ChatList          from './components/chat/ChatList'
 import ChatView          from './components/chat/ChatView'
-import PostList          from './components/posts/PostList'
 import PostFeed          from './components/posts/PostFeed'
 import PostThread        from './components/posts/PostThread'
 import CreatePostModal   from './components/posts/CreatePostModal'
-import ProfileModal      from './components/ui/ProfileModal'
-import MyProfileModal    from './components/ui/MyProfileModal'
+import ProfileScreen     from './components/ui/ProfileScreen'
+import ContactsIntro     from './components/ui/ContactsIntro'
+import { sayError }       from './components/ui/dialogs'
 import AlbumsList        from './components/albums/AlbumsList'
 import AlbumGallery      from './components/albums/AlbumGallery'
 
@@ -77,17 +77,44 @@ async function shareGroupKeyWithNewcomers(chatId: string, K: any) {
   }
 }
 
+/** Текст, который показывается вместо нерасшифрованного сообщения.
+ *  Слова «ключ» и «E2EE» человеку ничего не говорят, а тревогу вызывают —
+ *  подпись рисует MessageBubble по статусу, здесь остаётся шифротекст. */
 async function decryptMsgs(msgs: Message[], key: any): Promise<Message[]> {
   if (!key) return msgs
   return Promise.all(msgs.map(async m => {
     if (m.type !== 'text') return m
     const result = await decryptMessage(m.text, key)
-    // key_changed: ключи изменились — текст недоступен, но это не атака
-    const text = result.status === 'key_changed'
-      ? '🔒 [сообщение зашифровано другим ключом]'
-      : result.text ?? m.text
-    return { ...m, text, _msgStatus: result.status }
+    const dec = { ...m, text: result.text ?? m.text, _msgStatus: result.status }
+    // Цитата зашифрована тем же ключом чата — расшифровываем заодно, иначе
+    // в ответе была бы строка base64.
+    if (m.reply_to && m.reply_to.type === 'text') {
+      const quoted = await decryptMessage(m.reply_to.text, key)
+      dec.reply_to = { ...m.reply_to, text: quoted.text ?? m.reply_to.text }
+    }
+    return dec
   }))
+}
+
+/** Строка под именем чата: «Вы: …», «Мама: …», «📷 Фото». */
+async function buildPreview(chat: Chat, myId: string, key: any): Promise<string> {
+  const last = chat.last_message
+  if (!last) return (chat.members?.length || 0) > 2 ? 'Группа создана' : 'Пока ни одного сообщения'
+
+  let body: string
+  if (last.type === 'image') body = '📷 Фото'
+  else if (last.type === 'video') body = '🎥 Видео'
+  else if (last.type === 'audio') body = '🎵 Голосовое сообщение'
+  else if (!key) body = 'Сообщение'
+  else {
+    const res = await decryptMessage(last.text, key)
+    body = res.status === 'key_changed' || !res.text ? 'Сообщение' : res.text
+  }
+
+  const isGroup = (chat.members?.length || 0) > 2
+  if (String(last.sender_id) === String(myId)) return `Вы: ${body}`
+  if (isGroup && last.sender_name) return `${last.sender_name}: ${body}`
+  return body
 }
 
 // ── App ───────────────────────────────────────────────────────────────────
@@ -104,12 +131,15 @@ export default function App() {
   const [activePostId,  setActivePostId]  = useState<string | null>(null)
   const [showCreate,     setShowCreate]    = useState(false)
   const [postFeedKey,    setFeedKey]       = useState(0)
-  const [showMyProfile,  setShowMyProfile] = useState(false)
   const [postQuery,     setPostQuery]     = useState('')
-  const [postFilter,    setPostFilter]    = useState<'all'|'friends'|'saved'>('all')
+  const [showSaved,     setShowSaved]     = useState(false)
   const [mobileScreen,  setMobileScreen]  = useState<'list'|'detail'>('list')
   const [albums,        setAlbums]        = useState<Album[]>([])
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null)
+  // Расшифрованные превью последних сообщений: ключи чатов есть только здесь.
+  const [previews,      setPreviews]      = useState<Record<string, string>>({})
+  const [keysVersion,   setKeysVersion]   = useState(0)
+  const [askContacts,   setAskContacts]   = useState(false)
 
   const wsRef          = useRef<WebSocket | null>(null)
   const wsRetryTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -120,6 +150,9 @@ export default function App() {
   const myPubKeyRef    = useRef<string | null>(null)  // base64 публичный ключ для safety number
   const chatsRef       = useRef<Chat[]>([])
   const userIdRef      = useRef<string | null>(null)
+  // Актуальная лента для цитат: sendMessage не должен зависеть от messages,
+  // иначе колбэк пересоздаётся на каждое сообщение.
+  const messagesRef    = useRef<Record<string, Message[]>>({})
 
   useEffect(() => {
     Promise.all([import('@capacitor/status-bar'), import('@capacitor/core')]).then(
@@ -146,6 +179,7 @@ export default function App() {
 
   useEffect(() => { chatsRef.current = chats }, [chats])
   useEffect(() => { userIdRef.current = user?.id || null }, [user])
+  useEffect(() => { messagesRef.current = messages }, [messages])
 
   // Аппаратная/жестовая кнопка "назад" на Android: сначала закрываем открытый
   // оверлей (модалку/лайтбокс), затем возвращаемся из чата/поста/альбома к списку,
@@ -328,13 +362,15 @@ export default function App() {
    */
   const syncContacts = useCallback(async (silent = true) => {
     if (!canReadContacts()) return
+    // Флаг ставим ДО проверки на отказ: раньше он записывался только при
+    // успехе, и отказавшегося человека спрашивали снова при каждом запуске.
+    localStorage.setItem('contacts_synced', '1')
     try {
       const hashes = await collectContactHashes()
       if (!hashes) {
         if (!silent) showToast('Доступ к контактам не разрешён')
         return
       }
-      localStorage.setItem('contacts_synced', '1')
       if (!hashes.length) {
         if (!silent) showToast('В телефонной книге нет подходящих номеров')
         return
@@ -352,13 +388,13 @@ export default function App() {
     }
   }, [loadChats])
 
-  // При первом входе — сразу ищем знакомых и заводим с ними чаты. Дальше
-  // только по кнопке: молча перечитывать телефонную книгу каждый запуск
-  // ни к чему.
+  // При первом входе спрашиваем СВОИМ экраном, а системное окно показываем
+  // только после согласия. Дальше — только по кнопке в профиле: молча
+  // перечитывать телефонную книгу каждый запуск ни к чему.
   useEffect(() => {
-    if (!user || localStorage.getItem('contacts_synced')) return
-    syncContacts(true)
-  }, [user, syncContacts])
+    if (!user || !canReadContacts() || localStorage.getItem('contacts_synced')) return
+    setAskContacts(true)
+  }, [user])
 
   // Периодически обновляем список чатов, чтобы счётчики непрочитанных были актуальны
   useEffect(() => {
@@ -385,10 +421,32 @@ export default function App() {
         if (!key) continue
         chatKeysRef.current.set(chat.id, key)
         await syncChatKey(chat.id, key)
+        // Ключ появился — превью в списке чатов пора пересчитать: до этого
+        // на его месте стояло безликое «Сообщение».
+        if (!cancelled) setKeysVersion(v => v + 1)
       }
     })()
     return () => { cancelled = true }
   }, [user?.id, chatIdsKey])
+
+  // Превью последних сообщений для списка чатов. Сервер отдаёт их такими же
+  // зашифрованными, как хранит, — расшифровать может только этот клиент.
+  // Зависимость — id последних сообщений: пересчитываем, когда что-то
+  // действительно пришло, а не каждые 15 секунд на том же наборе.
+  const lastMsgKey = chats.map(c => `${c.id}:${c.last_message?.id || ''}`).join(',')
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    ;(async () => {
+      const next: Record<string, string> = {}
+      for (const chat of chatsRef.current) {
+        const key = chatKeysRef.current.get(chat.id)
+        next[chat.id] = await buildPreview(chat, user.id, key).catch(() => '')
+      }
+      if (!cancelled) setPreviews(next)
+    })()
+    return () => { cancelled = true }
+  }, [user?.id, lastMsgKey, chatIdsKey, keysVersion])
 
   // Статус "в сети" хранится в Redis по TTL (см. AuthService.set_user_online) —
   // без периодического heartbeat он погаснет через минуту после входа
@@ -471,18 +529,22 @@ export default function App() {
       const key = chatKeysRef.current.get(chatId)
       let text = data.text
       let _msgStatus = 'no_key'
+      let replyTo = data.reply_to || null
 
       if (key && data.type === 'text') {
         const result = await decryptMessage(data.text, key)
         _msgStatus = result.status
-        text = result.status === 'key_changed'
-          ? '🔒 [сообщение зашифровано другим ключом]'
-          : result.text ?? data.text
+        text = result.text ?? data.text
+      }
+      // Цитата зашифрована тем же ключом чата.
+      if (key && replyTo && replyTo.type === 'text') {
+        const quoted = await decryptMessage(replyTo.text, key)
+        replyTo = { ...replyTo, text: quoted.text ?? replyTo.text }
       }
 
       setMessages(prev => {
         const list = prev[chatId] || []
-        const incoming = { ...data, text, _msgStatus }
+        const incoming = { ...data, text, _msgStatus, reply_to: replyTo }
         // Эхо собственного сообщения: заменяем оптимистично показанное
         // (сопоставление по client_id), чтобы не было дубля
         const idx = data.client_id ? list.findIndex(m => m.client_id === data.client_id) : -1
@@ -573,12 +635,17 @@ export default function App() {
   // ── Send ──────────────────────────────────────────────────────────────────
   // Возвращает false, если сообщение НЕ ушло (сокет переподключается) —
   // вызывающий не должен очищать поле ввода, иначе текст молча потеряется
-  const sendMessage = useCallback(async (text: string): Promise<boolean> => {
+  const sendMessage = useCallback(async (text: string, replyToId?: string | null): Promise<boolean> => {
     const chatId = activeChatRef.current
     if (!chatId || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false
     const key = chatKeysRef.current.get(chatId)
     const enc = key ? await encryptMessage(text, key) : text
     const clientId = crypto.randomUUID()
+    // Цитату для оптимистичного показа берём из уже расшифрованной ленты —
+    // ходить за ней на сервер не нужно, эхо всё равно принесёт настоящую.
+    const quoted = replyToId
+      ? (messagesRef.current[chatId] || []).find(m => m.id === replyToId)
+      : undefined
     // Оптимистично показываем своё сообщение сразу; эхо от сервера
     // заменит его настоящим (сопоставление по client_id в ws.onmessage)
     setMessages(prev => ({
@@ -590,11 +657,19 @@ export default function App() {
         sender_id: userIdRef.current || undefined,
         is_read: false,
         date: new Date().toISOString(),
+        reply_to_id: replyToId || null,
+        reply_to: quoted ? {
+          id: quoted.id!,
+          text: quoted.text,
+          type: quoted.type,
+          sender_id: quoted.sender_id || quoted.writer || '',
+          sender_name: quoted.sender_name ?? null,
+        } : null,
         _msgStatus: 'pending',
       }],
     }))
     try {
-      wsRef.current.send(JSON.stringify({ text: enc, client_id: clientId }))
+      wsRef.current.send(JSON.stringify({ text: enc, client_id: clientId, reply_to_id: replyToId || null }))
     } catch {
       setMessages(prev => ({
         ...prev,
@@ -603,6 +678,26 @@ export default function App() {
       return false
     }
     return true
+  }, [])
+
+  /**
+   * Переслать текст в другой чат.
+   *
+   * Просто переложить шифротекст нельзя: у каждого чата свой ключ, и в чужом
+   * чате блоб нечем открыть. Расшифровываем своим, зашифровываем ключом
+   * получателя — сервер обоих не видит.
+   */
+  const forwardText = useCallback(async (targetChatId: string, plainText: string) => {
+    let key = chatKeysRef.current.get(targetChatId)
+    if (!key && keyPairRef.current) {
+      const target = chatsRef.current.find(c => c.id === targetChatId)
+      if (target) {
+        key = await resolveChatKey(target, userIdRef.current!, keyPairRef.current).catch(() => null)
+        if (key) { chatKeysRef.current.set(targetChatId, key); syncChatKey(targetChatId, key) }
+      }
+    }
+    const enc = key ? await encryptMessage(plainText, key) : plainText
+    await api.forwardMessage(targetChatId, { text: enc, type: 'text' })
   }, [])
 
   // ── Start chat ────────────────────────────────────────────────────────────
@@ -631,8 +726,9 @@ export default function App() {
         if (keys.length) await api.setChatKeys(chat.id, keys).catch(() => {})
       }
       setChats(prev => prev.find(c => c.id === chat.id) ? prev.map(c => c.id === chat.id ? chat : c) : [chat, ...prev])
+      setActiveTab('chats')
       await openChat(chat.id, chat)
-    } catch (err: any) { alert('Ошибка: ' + err.message) }
+    } catch (err) { sayError('Не удалось начать чат', err) }
   }, [openChat])
 
   const logout = useCallback(async () => {
@@ -670,6 +766,7 @@ export default function App() {
       user={user}
       chats={chats}
       activeChatId={currentChatId}
+      previews={previews}
       onOpenChat={id => { openChat(id); setMobileScreen('detail') }}
       onStartChat={(uid, data) => startChat(uid, data)}
     />
@@ -683,24 +780,44 @@ export default function App() {
       setMessages={setMessages as any}
       userId={user.id}
       onSend={sendMessage}
+      onForwardText={forwardText}
       onBack={() => setMobileScreen('list')}
       onStartChat={(uid) => startChat(uid)}
     />
   )
 
-  const postPanel = (
-    <PostList
-      filter={postFilter}
-      onFilter={setPostFilter}
+  const feed = (
+    <PostFeed
+      key={postFeedKey}
       query={postQuery}
       onQuery={setPostQuery}
+      onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }}
       onCreatePost={() => setShowCreate(true)}
     />
   )
 
   const postMain = activePostId
     ? <PostThread postId={activePostId} userId={user.id} onBack={() => { setActivePostId(null); setMobileScreen('list') }} />
-    : <PostFeed key={`${postFeedKey}-${postFilter}`} query={postQuery} filter={postFilter} onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }} onCreatePost={() => setShowCreate(true)} />
+    : feed
+
+  // «Сохранённые» переехали из фильтров ленты в профиль — там их и ищут.
+  const profilePanel = showSaved ? (
+    <PostFeed
+      filter="saved"
+      title="Сохранённые"
+      query={postQuery}
+      onQuery={setPostQuery}
+      onSelectPost={id => { setActivePostId(id); setActiveTab('posts'); setShowSaved(false); setMobileScreen('detail') }}
+      onBack={() => { setShowSaved(false); setPostQuery('') }}
+    />
+  ) : (
+    <ProfileScreen
+      userId={user.id}
+      onLogout={logout}
+      onOpenSaved={() => { setPostQuery(''); setShowSaved(true) }}
+      onSyncContacts={canReadContacts() ? () => syncContacts(false) : undefined}
+    />
+  )
 
   const albumsPanel = (
     <AlbumsList
@@ -718,7 +835,7 @@ export default function App() {
       onChanged={loadAlbums}
     />
   ) : (
-    <div className="flex-1 hidden md:flex items-center justify-center text-muted text-sm">
+    <div className="flex-1 hidden md:flex items-center justify-center text-muted text-md">
       Выберите альбом
     </div>
   )
@@ -727,17 +844,21 @@ export default function App() {
     <div className="h-full flex flex-col overflow-hidden bg-bg">
       {/* Desktop */}
       <div className="hidden md:flex flex-1 min-h-0">
-        <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} onLogout={logout} onProfile={() => setShowMyProfile(true)} />
-        {activeTab === 'chats' ? <>{chatPanel}{chatMain}</> : activeTab === 'posts' ? <>{postPanel}{postMain}</> : <>{albumsPanel}{albumsMain}</>}
+        <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} />
+        {activeTab === 'chats'  ? <>{chatPanel}{chatMain}</>
+         : activeTab === 'posts' ? postMain
+         : activeTab === 'albums' ? <>{albumsPanel}{albumsMain}</>
+         : profilePanel}
       </div>
 
       {/* Mobile */}
       <div className="flex md:hidden flex-1 min-h-0 flex-col">
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {mobileScreen === 'list' ? (
-            activeTab === 'chats' ? chatPanel : activeTab === 'posts' ? (
-              <PostFeed key={`${postFeedKey}-${postFilter}`} query={postQuery} filter={postFilter} onSelectPost={id => { setActivePostId(id); setMobileScreen('detail') }} onCreatePost={() => setShowCreate(true)} onQuery={setPostQuery} onFilter={setPostFilter} />
-            ) : albumsPanel
+            activeTab === 'chats'  ? chatPanel
+            : activeTab === 'posts' ? feed
+            : activeTab === 'albums' ? albumsPanel
+            : profilePanel
           ) : (
             activeTab === 'chats' ? chatMain : activeTab === 'posts' ? (
               <PostThread postId={activePostId} userId={user.id} onBack={() => { setActivePostId(null); setMobileScreen('list') }} />
@@ -753,8 +874,11 @@ export default function App() {
           )}
         </div>
         {mobileScreen === 'list' && (
-          <BottomNav active={activeTab} onNavigate={s => { setActiveTab(s); setMobileScreen('list') }} onProfile={() => setShowMyProfile(true)}
-            unread={chats.reduce((sum, c) => sum + (c.unread_count || 0), 0)} />
+          <BottomNav
+            active={activeTab}
+            onNavigate={s => { setActiveTab(s); setMobileScreen('list'); setShowSaved(false) }}
+            unread={chats.reduce((sum, c) => sum + (c.unread_count || 0), 0)}
+          />
         )}
       </div>
 
@@ -762,12 +886,14 @@ export default function App() {
         <CreatePostModal onClose={() => setShowCreate(false)} onCreate={() => { setShowCreate(false); setFeedKey(k => k + 1) }} />
       )}
 
-      {showMyProfile && user && (
-        <MyProfileModal
-          userId={user.id}
-          onClose={() => setShowMyProfile(false)}
-          onLogout={() => { setShowMyProfile(false); logout() }}
-          onSyncContacts={canReadContacts() ? () => syncContacts(false) : undefined}
+      {askContacts && (
+        <ContactsIntro
+          onAllow={() => { setAskContacts(false); syncContacts(false) }}
+          onSkip={() => {
+            setAskContacts(false)
+            // Отказ запоминаем в любом случае — второй раз не спрашиваем.
+            localStorage.setItem('contacts_synced', '1')
+          }}
         />
       )}
 

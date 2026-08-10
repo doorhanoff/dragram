@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import uuid
@@ -14,7 +15,7 @@ from .exceptions import (
 from .repo import ChatsRepository
 from .schemas import (
     CreateChat, CreateChatDb, MessageDbSchema, ChatKeyItem, ForwardMessage,
-    MessageEvent, ReadEvent, DeleteEvent, WSSendMessage,
+    MessageEvent, ReadEvent, DeleteEvent, WSSendMessage, LastMessage,
 )
 from .models import ChatsOrm, MessagesOrm
 from ..auth.models import UsersOrm
@@ -23,6 +24,7 @@ from ..notifications.service import NotificationsService
 from src.config import ALLOWED_MEDIA_TYPES, ALLOWED_IMAGE_TYPES
 from src.core.quota import UploadQuota
 from src.core.rate_limit import hit_counter
+from src.core.presence import last_seen_key, online_key, parse_last_seen, touch_presence
 
 
 NOTIFICATION_BODY_BY_TYPE = {
@@ -118,20 +120,40 @@ class ChatsService:
         if not chats:
             return chats
 
-        unread = await self.repo.unread_counts([c.id for c in chats], user.id)
+        chat_ids = [c.id for c in chats]
+        unread = await self.repo.unread_counts(chat_ids, user.id)
+        last = await self.repo.last_messages(chat_ids)
 
         # Один MGET на всех участников всех чатов вместо запроса на каждого
         members = [m for chat in chats for m in chat.members]
-        online_flags = await self.redis.mget([f"online:{m.id}" for m in members])
-        for member, online in zip(members, online_flags):
+        online_flags = await self.redis.mget([online_key(m.id) for m in members])
+        last_seen_values = await self.redis.mget([last_seen_key(m.id) for m in members])
+        for member, online, seen in zip(members, online_flags, last_seen_values):
             member.is_active = online is not None
+            member.last_seen = parse_last_seen(seen)
 
         for chat in chats:
             chat.unread_count = unread.get(chat.id, 0)
-        return chats
+            msg = last.get(chat.id)
+            chat.last_message = LastMessage(
+                id=msg.id,
+                text=msg.text,
+                type=msg.type,
+                sender_id=msg.sender_id,
+                sender_name=msg.sender.name if msg.sender else None,
+                created_at=msg.created_at,
+            ) if msg else None
+
+        # Свежий разговор — первым: на это человек полагается не задумываясь.
+        # У пустого чата активность — момент, когда его завели.
+        return sorted(
+            chats,
+            key=lambda c: c.last_message.created_at if c.last_message else c.created_at,
+            reverse=True,
+        )
 
     async def set_online(self, user_id: uuid.UUID) -> None:
-        await self.redis.set(f"online:{user_id}", "1", ex=60)
+        await touch_presence(self.redis, user_id)
 
     async def get_messages(
         self,
@@ -171,10 +193,15 @@ class ChatsService:
         type: Literal["text", "image", "video", "audio"] = "text",
         thumbnail_url: str | None = None,
         client_id: str | None = None,
+        reply_to_id: uuid.UUID | None = None,
     ) -> MessageEvent:
+        # Отвечать можно только на сообщение из этого же чата: иначе ответом
+        # с чужим id в чат утекала бы цитата из другой переписки.
+        if reply_to_id and not await self.repo.message_belongs_to_chat(reply_to_id, chat.id):
+            reply_to_id = None
         message_db = MessageDbSchema(
             text=text, type=type, thumbnail_url=thumbnail_url,
-            sender_id=user.id, chat_id=chat.id,
+            sender_id=user.id, chat_id=chat.id, reply_to_id=reply_to_id,
         )
         msg = await self.repo.create_message(message_db)
 
@@ -217,9 +244,14 @@ class ChatsService:
         # Пересылается ссылка на файл, а не сам файл, поэтому она обязана вести
         # в наше хранилище. Иначе в чат пересылается «картинка» с адресом
         # злоумышленника, и клиенты участников сами её загружают.
-        for url in (data.text, data.thumbnail_url):
+        # У текста text — шифротекст, ссылкой он не является и проверке
+        # на «свой домен» не подлежит.
+        urls = (data.thumbnail_url,) if data.type == "text" else (data.text, data.thumbnail_url)
+        for url in urls:
             if url and self.s3.key_from_url(url) is None:
                 raise ForeignMediaUrl()
+        if data.type == "text":
+            await self._check_message_rate(user.id)
         return await self.send_message(
             user, chat, text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
         )
@@ -228,7 +260,7 @@ class ChatsService:
         recipient_ids = [m for m in chat.members_ids if m != sender.id]
         if not recipient_ids:
             return
-        online_flags = await self.redis.mget([f"online:{rid}" for rid in recipient_ids])
+        online_flags = await self.redis.mget([online_key(rid) for rid in recipient_ids])
         offline_ids = [rid for rid, online in zip(recipient_ids, online_flags) if online is None]
         if not offline_ids:
             return
@@ -303,7 +335,7 @@ class ChatsService:
         await self._check_message_rate(user.id)
         await self.send_message(
             user, chat, text=incoming.text, type=incoming.type,
-            client_id=incoming.client_id,
+            client_id=incoming.client_id, reply_to_id=incoming.reply_to_id,
         )
 
     async def _check_message_rate(self, user_id: uuid.UUID) -> None:

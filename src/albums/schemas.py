@@ -25,6 +25,10 @@ class AlbumResponse(BaseModel):
     creator_id: uuid.UUID
     created_at: datetime.datetime
     cover: str | None = None
+    # «34 фото · последнее 8 августа» — то, чего под названием не хватало.
+    # Заполняются только в списке альбомов (get_user_albums).
+    materials_count: int = 0
+    last_added_at: datetime.datetime | None = None
 
 
 class AlbumDetailResponse(AlbumResponse):

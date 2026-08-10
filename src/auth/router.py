@@ -116,6 +116,22 @@ async def heartbeat(
     await service.set_user_online(payload.id)
 
 
+@router.get("/users/directory", response_model=list[UserShortResponse],
+            dependencies=[Depends(make_rate_limiter(max_requests=30, window=60))])
+async def get_directory(
+    limit: int = Query(200, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    _: UsersOrm = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    """Все, кто есть в Dragram, по алфавиту — список «кому написать».
+
+    Объявлен ДО /users/{user_id}: иначе «directory» попадёт в тот маршрут как
+    user_id и не разберётся в UUID.
+    """
+    return await service.list_directory(limit=limit, offset=offset)
+
+
 @router.get("/users/{user_id}", response_model=UserShortResponse)
 async def get_user(
     user_id: uuid.UUID,

@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from pydantic_extra_types.phone_numbers import PhoneNumber
@@ -51,6 +52,9 @@ class UserShortResponse(BaseModel):
     description: str | None
     image_url: str | None = None
     is_active: bool = False
+    # Момент последнего heartbeat — чтобы под именем всегда была строка
+    # («в сети» / «был недавно» / «был вчера в 21:40»), а не пустота.
+    last_seen: datetime.datetime | None = None
 
 
 class MyProfileResponse(UserShortResponse):

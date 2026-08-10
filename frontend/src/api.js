@@ -254,6 +254,9 @@ export const api = {
   forwardMessage:  (chatId, data)  => req('POST', `/chats/${chatId}/forward`, data),
   getUser:         (id)            => req('GET',  `/auth/users/${id}`),
   searchUsers:     (q)             => req('GET',  `/auth/users?search_text=${encodeURIComponent(q)}&limit=20`),
+  /** Все, кто есть в Dragram, по алфавиту — список «кому написать».
+   *  При полусотне родственников поиск не нужен: все помещаются в один список. */
+  getDirectory:    ()              => req('GET',  '/auth/users/directory?limit=200'),
   setPublicKey:    (key)           => req('PUT',  '/auth/me/public-key', { public_key: key }),
   setKeyBackup:    (backup)        => req('PUT',  '/auth/me/key-backup', { key_backup: backup }),
   getKeyBackup:    ()              => req('GET',  '/auth/me/key-backup'),

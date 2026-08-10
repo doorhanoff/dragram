@@ -80,6 +80,15 @@ class PostsRepository(BaseRepository):
             )
             likes_map = {row.post_id: row.cnt for row in lc_res}
 
+            # Число комментариев: под постом было слово «комментарии», по
+            # которому не видно, есть они вообще или нет.
+            cc_res = await self.session.execute(
+                select(CommentsOrm.post_id, func.count().label("cnt"))
+                .where(CommentsOrm.post_id.in_(post_ids))
+                .group_by(CommentsOrm.post_id)
+            )
+            comments_map = {row.post_id: row.cnt for row in cc_res}
+
             liked_set: set = set()
             bm_set: set = set()
             if user_id:
@@ -99,6 +108,7 @@ class PostsRepository(BaseRepository):
                 result.append({
                     "orm": p,
                     "likes_count":   likes_map.get(p.id, 0),
+                    "comments_count": comments_map.get(p.id, 0),
                     "is_liked":      p.id in liked_set,
                     "is_bookmarked": p.id in bm_set,
                 })

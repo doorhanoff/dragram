@@ -48,9 +48,11 @@ export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 
         </div>
       )}
       {isActive && (
+        // Точка растёт вместе с аватаром: на 26 px она была почти не видна,
+        // а на 112 px терялась совсем.
         <span
           className="absolute bottom-0 right-0 rounded-full bg-online border-2 border-surface"
-          style={{ width: 9, height: 9 }}
+          style={{ width: Math.max(10, Math.round(size * 0.24)), height: Math.max(10, Math.round(size * 0.24)) }}
         />
       )}
     </div>

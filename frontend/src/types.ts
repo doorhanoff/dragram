@@ -5,6 +5,8 @@ export interface User {
   description?: string | null
   image_url?: string | null
   is_active?: boolean
+  /** Момент последнего heartbeat — для строки «был(а) вчера в 21:40». */
+  last_seen?: string | null
   public_key?: string | null
 }
 
@@ -13,6 +15,18 @@ export interface Member {
   name: string
   image_url?: string | null
   is_active?: boolean
+  last_seen?: string | null
+}
+
+/** Последнее сообщение чата. text для type==='text' зашифрован — расшифровка
+ *  на клиенте, ключи лежат в chatKeysRef. */
+export interface LastMessage {
+  id: string
+  text: string
+  type: 'text' | 'image' | 'video' | 'audio'
+  sender_id: string
+  sender_name?: string | null
+  created_at: string
 }
 
 export interface Chat {
@@ -23,6 +37,16 @@ export interface Chat {
   members_ids: string[]
   created_at: string
   unread_count?: number
+  last_message?: LastMessage | null
+}
+
+/** Цитата в ответе. Текст тоже зашифрован. */
+export interface ReplyPreview {
+  id: string
+  text: string
+  type: 'text' | 'image' | 'video' | 'audio'
+  sender_id: string
+  sender_name?: string | null
 }
 
 export interface Message {
@@ -40,6 +64,8 @@ export interface Message {
   thumbnail_url?: string | null
   date?: string
   created_at?: string
+  reply_to_id?: string | null
+  reply_to?: ReplyPreview | null
   _msgStatus?: string
 }
 
@@ -69,6 +95,8 @@ export interface Album {
   creator_id: string
   created_at: string
   cover?: string | null
+  materials_count?: number
+  last_added_at?: string | null
 }
 
 export interface AlbumDetail extends Album {
@@ -82,5 +110,8 @@ export interface AlbumMaterial {
   published_at: string
 }
 
-export type NavSection = 'chats' | 'posts' | 'albums'
+// Профиль — полноценный четвёртый экран, а не окошко поверх текущего:
+// раньше три вкладки переключали экран, а четвёртая открывала модалку и
+// никогда не подсвечивалась.
+export type NavSection = 'chats' | 'posts' | 'albums' | 'profile'
 export type MobileScreen = 'list' | 'detail'

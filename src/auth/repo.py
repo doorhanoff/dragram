@@ -206,6 +206,17 @@ class AuthRepository(BaseRepository):
         await self.session.execute(delete(UsersOrm).where(UsersOrm.id == user_id))
         return orphaned
 
+    async def list_all(self, limit: int, offset: int) -> list[UsersOrm]:
+        """Все пользователи по алфавиту — для списка «кому написать»."""
+        query = (
+            select(UsersOrm)
+            .order_by(UsersOrm.name.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
     async def search(self, text: str | None, limit: int, offset: int) -> list[UsersOrm]:
         if not text:
             return []

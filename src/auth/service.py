@@ -12,6 +12,7 @@ from .schemas import RegisterForm, CreateUser, LoginForm, MyProfileResponse, Tok
 from .models import UsersOrm
 from src.core.hashing import hash_password, verify_password
 from src.core.rate_limit import hit_counter
+from src.core.presence import last_seen_key, online_key, parse_last_seen, touch_presence
 from src.core.tickets import WS_TICKET_PREFIX, WS_TICKET_TTL, issue_ticket, redeem_ticket
 from src.jwt_auth.jwt_service import JWTManager, TokenPair, TokenType
 
@@ -89,9 +90,10 @@ class AuthService:
         user = await self.repo.get_user_by_id(user_id)
         if not user:
             return None
-        is_online = await self.redis.exists(f"online:{user_id}")
+        is_online, seen = await self.redis.mget([online_key(user_id), last_seen_key(user_id)])
         response = UserShortResponse.model_validate(user)
-        response.is_active = bool(is_online)
+        response.is_active = is_online is not None
+        response.last_seen = parse_last_seen(seen)
         return response
 
     async def get_my_profile(self, user_id: uuid.UUID) -> MyProfileResponse | None:
@@ -100,7 +102,7 @@ class AuthService:
         if not user:
             return None
         response = MyProfileResponse.model_validate(user)
-        response.is_active = bool(await self.redis.exists(f"online:{user_id}"))
+        response.is_active = bool(await self.redis.exists(online_key(user_id)))
         return response
 
     async def logout(
@@ -180,13 +182,32 @@ class AuthService:
 
     async def search_users(self, search_text: str | None, limit: int = 10, offset: int = 0) -> list[UserShortResponse]:
         users = await self.repo.search(search_text, limit=limit, offset=offset)
+        return await self._with_presence(users)
+
+    async def list_directory(self, limit: int, offset: int) -> list[UserShortResponse]:
+        """Все, кто есть в Dragram, по алфавиту.
+
+        Раньше список отдавался только по поиску от трёх букв — чтобы одним
+        запросом нельзя было выгрузить телефонную книгу сервиса. Номера отсюда
+        и так убраны (UserShortResponse их не содержит), а сам сервис закрыт
+        дверью и рассчитан на несколько десятков родственников: прятать от них
+        друг друга незачем, а «наберите три буквы» — главная причина, по которой
+        личный чат оказался самой спрятанной функцией приложения.
+        """
+        users = await self.repo.list_all(limit=limit, offset=offset)
+        return await self._with_presence(users)
+
+    async def _with_presence(self, users: list[UsersOrm]) -> list[UserShortResponse]:
         if not users:
             return []
-        online_flags = await self.redis.mget([f"online:{u.id}" for u in users])
+        keys = [online_key(u.id) for u in users] + [last_seen_key(u.id) for u in users]
+        values = await self.redis.mget(keys)
+        online_flags, seen_values = values[:len(users)], values[len(users):]
         results = []
-        for u, online in zip(users, online_flags):
+        for u, online, seen in zip(users, online_flags, seen_values):
             response = UserShortResponse.model_validate(u)
             response.is_active = online is not None
+            response.last_seen = parse_last_seen(seen)
             results.append(response)
         return results
 
@@ -276,7 +297,7 @@ class AuthService:
         return await self.repo.get_public_key(user_id)
 
     async def set_user_online(self, user_id: uuid.UUID) -> None:
-        await self.redis.set(f"online:{user_id}", "1", ex=60)
+        await touch_presence(self.redis, user_id)
 
 
 

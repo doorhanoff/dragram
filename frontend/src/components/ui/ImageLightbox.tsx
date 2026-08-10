@@ -164,7 +164,7 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
         <button
           onClick={e => { e.stopPropagation(); downloadUrl(images[idx]) }}
           title="Скачать"
-          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
         >
           <IconDownload size={17} stroke={1.8} />
         </button>
@@ -172,7 +172,7 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
           <button
             onClick={e => { e.stopPropagation(); onForward() }}
             title="Переслать"
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
           >
             <IconShare size={17} stroke={1.8} />
           </button>

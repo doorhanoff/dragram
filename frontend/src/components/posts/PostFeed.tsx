@@ -1,25 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { IconPlus, IconSearch, IconWorld, IconUsers, IconBookmark } from '@tabler/icons-react'
+import { IconPencilPlus, IconSearch, IconX, IconArrowLeft } from '@tabler/icons-react'
 import PostCard from './PostCard'
 import type { Post } from '../../types'
 import { api } from '../../api'
 import { withCache } from '../../dataCache'
 
-type Filter = 'all' | 'friends' | 'saved'
+type Filter = 'all' | 'saved'
 
 interface Props {
   query: string
-  filter?: string
+  filter?: Filter
+  /** Заголовок раздела: «Лента» или «Сохранённые». */
+  title?: string
   onSelectPost: (id: string) => void
-  onCreatePost: () => void
-  onQuery?: (q: string) => void
-  onFilter?: (f: Filter) => void
+  onCreatePost?: () => void
+  onQuery: (q: string) => void
+  /** Показан как отдельный раздел (Сохранённые из профиля) — нужна стрелка назад. */
+  onBack?: () => void
 }
 
-export default function PostFeed({ query, filter = 'all', onSelectPost, onCreatePost, onQuery, onFilter }: Props) {
+export default function PostFeed({
+  query, filter = 'all', title = 'Лента', onSelectPost, onCreatePost, onQuery, onBack,
+}: Props) {
   const [posts,   setPosts]   = useState<Post[]>([])
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
+  // Поиск свёрнут в иконку: по десятку записей не ищут, а строка занимала
+  // место на первом экране постоянно.
+  const [searchOpen, setSearchOpen] = useState(!!query)
   const offsetRef = useRef(0)
   const timerRef  = useRef<ReturnType<typeof setTimeout>>()
 
@@ -28,8 +36,8 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
     try {
       const offset = reset ? 0 : offsetRef.current
       // Кешируем только первую страницу без поиска: она и открывается при
-      // каждом заходе. Хранить все страницы всех фильтров смысла нет —
-      // дальше человек всё равно листает с сетью.
+      // каждом заходе. Хранить все страницы смысла нет — дальше человек
+      // всё равно листает с сетью.
       const cacheable = reset && !text
       const apply = (items: Post[]) => {
         setPosts(items || [])
@@ -68,71 +76,63 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
     <div className="flex-1 overflow-y-auto bg-bg">
       {/* Header */}
       <div className="bg-bg flex-shrink-0 sticky top-0 z-10">
-        <div className="flex items-center px-5 pt-5 pb-2">
-          <span className="text-3xl font-black text-primary tracking-tight flex-1">
-            {query ? `Поиск: ${query}` : 'Посты'}
-          </span>
+        <div className="flex items-center gap-1 px-2 pt-3 pb-2">
+          {onBack && (
+            <button onClick={onBack} aria-label="Назад" className="tap rounded-2xl text-accent">
+              <IconArrowLeft size={26} stroke={2.2} />
+            </button>
+          )}
+          <h2 className="text-3xl font-bold text-primary tracking-tight flex-1 px-2 ellipsis">{title}</h2>
           <button
-            onClick={onCreatePost}
-            className="flex items-center gap-1.5 bg-gradient-to-br from-accent2 to-accent text-onAccent text-md font-extrabold px-4 py-[9px] rounded-2xl shadow-pop transition-opacity hover:opacity-90"
+            onClick={() => { if (searchOpen) onQuery(''); setSearchOpen(v => !v) }}
+            aria-label={searchOpen ? 'Закрыть поиск' : 'Найти'}
+            className="tap rounded-2xl text-muted hover:text-accent transition-colors"
           >
-            <IconPlus size={17} stroke={2.4} />
-            <span className="hidden sm:inline">Новый пост</span>
-            <span className="sm:hidden">Пост</span>
+            {searchOpen ? <IconX size={24} stroke={2} /> : <IconSearch size={24} stroke={2} />}
           </button>
+          {onCreatePost && (
+            <button onClick={onCreatePost} className="btn btn-primary ml-1">
+              <IconPencilPlus size={20} stroke={2} />
+              {/* Глагол, а не существительное: «+ Пост» на узком экране
+                  обрезался до слова «Пост» и не говорил, что произойдёт. */}
+              <span>Написать</span>
+            </button>
+          )}
         </div>
 
-        {/* Мобильный поиск + фильтры — показываем только когда есть колбэки (т.е. на мобильном) */}
-        {(onQuery || onFilter) && (
-          <div className="px-5 pb-3 flex flex-col gap-2.5 md:hidden">
-            {onQuery && (
-              <div className="flex items-center gap-2.5 bg-surface rounded-full px-[18px] h-[46px] shadow-soft">
-                <IconSearch size={18} stroke={1.8} className="text-muted flex-shrink-0" />
-                <input
-                  value={query}
-                  onChange={e => onQuery(e.target.value)}
-                  placeholder="Поиск по постам"
-                  className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted font-semibold text-md"
-                />
-              </div>
-            )}
-            {onFilter && (
-              <div className="flex gap-2">
-                {([
-                  { id: 'all',     icon: <IconWorld size={14} stroke={1.8} />,    label: 'Все' },
-                  { id: 'friends', icon: <IconUsers size={14} stroke={1.8} />,    label: 'Друзья' },
-                  { id: 'saved',   icon: <IconBookmark size={14} stroke={1.8} />, label: 'Сохранённые' },
-                ] as const).map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => onFilter(f.id)}
-                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-extrabold transition-colors ${
-                      filter === f.id
-                        ? 'bg-gradient-to-br from-accent2 to-accent text-onAccent'
-                        : 'bg-surface text-muted shadow-soft hover:text-primary'
-                    }`}
-                  >
-                    {f.icon}{f.label}
-                  </button>
-                ))}
-              </div>
-            )}
+        {searchOpen && (
+          <div className="px-4 pb-3">
+            <div className="flex items-center gap-2.5 bg-surface rounded-full px-[18px] h-[48px] shadow-soft">
+              <IconSearch size={20} stroke={1.8} className="text-muted flex-shrink-0" />
+              <input
+                value={query}
+                onChange={e => onQuery(e.target.value)}
+                placeholder="Найти среди записей"
+                autoFocus
+                className="flex-1 bg-transparent outline-none text-primary placeholder:text-muted text-md"
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* Feed */}
-      <div className="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-3">
+      <div className="max-w-2xl mx-auto px-4 py-2 pb-8 flex flex-col gap-3">
         {loading && posts.length === 0 && (
-          <p className="text-sm text-muted text-center py-12">Загрузка…</p>
+          <p className="text-md text-muted text-center py-12">Загрузка…</p>
         )}
         {!loading && posts.length === 0 && (
-          <div className="text-center py-16 flex flex-col items-center gap-3">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D0D0E0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <p className="text-sm text-muted">Нет публикаций</p>
+          <div className="text-center py-16 flex flex-col items-center gap-2 px-6">
+            <p className="text-xl font-bold text-primary">
+              {query ? 'Ничего не нашлось' : filter === 'saved' ? 'Здесь пока пусто' : 'Записей пока нет'}
+            </p>
+            <p className="text-md text-muted leading-relaxed">
+              {query
+                ? 'Попробуйте другое слово.'
+                : filter === 'saved'
+                  ? 'Нажмите закладку под записью — и она появится здесь.'
+                  : 'Расскажите родным, как дела: нажмите «Написать».'}
+            </p>
           </div>
         )}
         {posts.map(p => (
@@ -142,9 +142,9 @@ export default function PostFeed({ query, filter = 'all', onSelectPost, onCreate
           <button
             onClick={() => load(query)}
             disabled={loading}
-            className="self-center text-sm text-muted border border-border rounded-full px-5 py-2 hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+            className="self-center text-md text-muted border border-border rounded-full px-5 py-2.5 hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
           >
-            {loading ? 'Загрузка…' : 'Загрузить ещё'}
+            {loading ? 'Загрузка…' : 'Показать ещё'}
           </button>
         )}
       </div>

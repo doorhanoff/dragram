@@ -1,6 +1,10 @@
 import React, { useState, useRef } from 'react'
-import { IconCamera } from '@tabler/icons-react'
+import { IconCamera, IconEye, IconEyeOff } from '@tabler/icons-react'
 import { api } from '../api'
+import { formatPhoneInput, phoneIsComplete, humanAuthError } from '../utils'
+import { ask } from './ui/dialogs'
+
+const MIN_PASSWORD = 8
 
 interface Props { onLogin: (user: any, password: string, isNewAccount?: boolean) => void }
 
@@ -8,6 +12,7 @@ export default function Auth({ onLogin }: Props) {
   const [tab,   setTab]   = useState<'login' | 'register'>('login')
   const [phone, setPhone] = useState('')
   const [pass,  setPass]  = useState('')
+  const [showPass, setShowPass] = useState(false)
   const [name,  setName]  = useState('')
   const [desc,    setDesc]    = useState('')
   const [avatar,  setAvatar]  = useState<File | null>(null)
@@ -16,23 +21,43 @@ export default function Auth({ onLogin }: Props) {
   const [busy,    setBusy]    = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Наружу уходят только цифры: маска — это про то, как человеку набирать,
+  // а не про то, что хранится.
+  const phoneDigits = () => '+' + phone.replace(/\D/g, '')
+
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setBusy(true)
+    e.preventDefault(); setError('')
+    if (!phoneIsComplete(phone)) { setError('Введите номер целиком — 10 цифр после +7'); return }
+    setBusy(true)
     try {
-      await api.login(phone, pass)
+      await api.login(phoneDigits(), pass)
       onLogin(await api.getMe(), pass)
-    } catch (err: any) { setError(err.message) }
+    } catch (err: any) { setError(humanAuthError(err?.message)) }
     finally { setBusy(false) }
   }
 
   async function handleRegister(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setBusy(true)
+    e.preventDefault(); setError('')
+    if (!phoneIsComplete(phone)) { setError('Введите номер целиком — 10 цифр после +7'); return }
+    if (pass.length < MIN_PASSWORD) { setError(`Пароль должен быть не короче ${MIN_PASSWORD} символов`); return }
+
+    // Восстановления пароля нет и быть не может: им же расшифровывается
+    // переписка. Об этом надо предупредить ДО регистрации, а не после.
+    const ok = await ask({
+      title: 'Запишите пароль',
+      text: 'Восстановить его нельзя: этим же паролем открывается ваша переписка. Забудете — придётся заводить аккаунт заново, и старые сообщения не вернутся. Запишите его на бумаге и уберите в надёжное место.',
+      confirmLabel: 'Записал(а), продолжаем',
+      cancelLabel: 'Сначала запишу',
+    })
+    if (!ok) return
+
+    setBusy(true)
     try {
-      await api.register({ name, phone_number: phone, password: pass, description: desc.trim() || null })
-      await api.login(phone, pass)
+      await api.register({ name, phone_number: phoneDigits(), password: pass, description: desc.trim() || null })
+      await api.login(phoneDigits(), pass)
       if (avatar) await api.uploadAvatar(avatar).catch(() => {})
       onLogin(await api.getMe(), pass, true)
-    } catch (err: any) { setError(err.message) }
+    } catch (err: any) { setError(humanAuthError(err?.message)) }
     finally { setBusy(false) }
   }
 
@@ -44,73 +69,106 @@ export default function Auth({ onLogin }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-bg flex items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-sm py-6">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-[88px] h-[88px] rounded-[28px] bg-gradient-to-br from-accent2 to-accent mx-auto mb-4 flex items-center justify-center shadow-pop">
+          <div className="w-[88px] h-[88px] rounded-[28px] bg-accent mx-auto mb-4 flex items-center justify-center shadow-pop">
             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
           </div>
-          <h1 className="text-3xl font-black text-primary tracking-tight">Dragram</h1>
-          <p className="text-lg font-bold text-muted mt-1.5">Приватный мессенджер</p>
+          <h1 className="text-3xl font-bold text-primary tracking-tight">Dragram</h1>
+          <p className="text-lg text-muted mt-1.5">Приватный мессенджер</p>
         </div>
 
         {/* Tabs */}
         <div className="flex bg-surface2 rounded-2xl p-1.5 mb-4">
           {(['login', 'register'] as const).map(t => (
             <button key={t} onClick={() => { setTab(t); setError('') }}
-              className="flex-1 py-2.5 rounded-xl text-md font-extrabold transition-colors"
-              style={tab === t ? { background: 'var(--surface)', color: 'var(--text)', boxShadow: '0 2px 8px -3px var(--shadow)' } : { color: 'var(--muted)' }}>
+              className="flex-1 rounded-xl text-md font-bold transition-colors"
+              style={{ minHeight: 44, ...(tab === t ? { background: 'var(--surface)', color: 'var(--text)', boxShadow: '0 2px 8px -3px var(--shadow)' } : { color: 'var(--muted)' }) }}>
               {t === 'login' ? 'Войти' : 'Регистрация'}
             </button>
           ))}
         </div>
 
-        <form onSubmit={tab === 'login' ? handleLogin : handleRegister} className="flex flex-col gap-2.5">
+        <form onSubmit={tab === 'login' ? handleLogin : handleRegister} className="flex flex-col gap-3">
           {tab === 'register' && (
             <>
-              {/* Avatar */}
-              <div className="flex justify-center mb-2">
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  className="w-20 h-20 rounded-full flex items-center justify-center relative overflow-hidden bg-surface border-2 border-dashed border-border hover:border-accent transition-colors">
+              <div className="flex justify-center mb-1">
+                <button type="button" onClick={() => fileRef.current?.click()} aria-label="Ваше фото"
+                  className="w-24 h-24 rounded-full flex items-center justify-center relative overflow-hidden bg-surface border-2 border-dashed border-border hover:border-accent transition-colors">
                   {avatarPv
                     ? <img src={avatarPv} className="w-full h-full object-cover" alt="" />
-                    : <IconCamera size={24} stroke={1.5} className="text-muted" />
+                    : <IconCamera size={26} stroke={1.6} className="text-muted" />
                   }
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickAvatar} />
               </div>
-              <div className="h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]">
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="Имя" required
-                  className="flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold" />
-              </div>
-              <div className="h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]">
-                <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="О себе (необязательно)"
-                  className="flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold" />
-              </div>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут" required
+                minLength={2} maxLength={50} className="field" />
+              <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="О себе (необязательно)"
+                maxLength={200} className="field" />
             </>
           )}
-          <div className="h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><path d="M22 16.9v2a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 1h2a2 2 0 0 1 2 1.7 12.8 12.8 0 0 0 .7 2.8 2 2 0 0 1-.5 2.1L7.1 8.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4 12.8 12.8 0 0 0 2.8.7 2 2 0 0 1 1.7 2z"/></svg>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 916 555-08-21" required type="tel"
-              className="flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold" />
-          </div>
-          <div className="h-14 bg-surface border border-border rounded-2xl flex items-center gap-3 px-[18px]">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" className="flex-shrink-0"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-            {/* maxLength=128: Argon2 длину не ограничивает, а прежний потолок в
-                50 символов мешал длинным парольным фразам — самым надёжным. */}
-            <input value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" required type="password" minLength={8} maxLength={128}
-              className="flex-1 bg-transparent text-lg font-bold text-primary outline-none placeholder:text-muted placeholder:font-semibold" />
+
+          <div>
+            {/* Маска расставляет скобки и дефисы по мере набора, и «+7» уже
+                стоит в поле: сомнений «в каком виде писать» не остаётся. */}
+            <input
+              value={phone}
+              onChange={e => setPhone(formatPhoneInput(e.target.value))}
+              onFocus={() => { if (!phone) setPhone('+7') }}
+              placeholder="+7 (___) ___-__-__"
+              required
+              type="tel"
+              inputMode="numeric"
+              className="field tabular-nums"
+            />
           </div>
 
-          {error && <p className="text-sm font-bold text-red-500 text-center mt-1">{error}</p>}
+          <div>
+            <div className="relative">
+              {/* Слово «Пароль», а не •••••••• : прежняя подсказка выглядела
+                  ровно как уже введённый пароль, человек жал «Войти» и
+                  получал ошибку, не понимая, что не так. */}
+              <input
+                value={pass}
+                onChange={e => setPass(e.target.value)}
+                placeholder="Пароль"
+                required
+                type={showPass ? 'text' : 'password'}
+                minLength={MIN_PASSWORD}
+                maxLength={128}
+                className="field pr-14"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                aria-label={showPass ? 'Скрыть пароль' : 'Показать пароль'}
+                className="absolute right-0 top-0 h-full tap rounded-2xl text-muted"
+              >
+                {showPass ? <IconEyeOff size={22} stroke={1.8} /> : <IconEye size={22} stroke={1.8} />}
+              </button>
+            </div>
+            {tab === 'register' && (
+              <p className="text-md text-muted mt-1.5 px-1">Не меньше {MIN_PASSWORD} символов.</p>
+            )}
+          </div>
 
-          <button type="submit" disabled={busy}
-            className="w-full mt-2 h-14 bg-gradient-to-br from-accent2 to-accent text-onAccent rounded-2xl text-lg font-extrabold shadow-pop transition-opacity hover:opacity-90 disabled:opacity-50">
+          {error && <p className="text-md font-bold text-danger text-center">{error}</p>}
+
+          <button type="submit" disabled={busy} className="btn btn-primary w-full mt-1" style={{ minHeight: 56 }}>
             {busy ? '…' : tab === 'login' ? 'Войти' : 'Создать аккаунт'}
           </button>
+
+          {tab === 'login' && (
+            <p className="text-md text-muted text-center leading-relaxed mt-1">
+              Забыли пароль? Восстановить его нельзя — им открывается ваша переписка.
+              Попросите того, кто дал вам приложение, помочь завести новый аккаунт.
+            </p>
+          )}
         </form>
       </div>
     </div>

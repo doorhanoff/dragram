@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import select, insert, delete, or_
+from sqlalchemy import select, insert, delete, func, or_
 from src.db.repository import BaseRepository
 from .models import AlbumsOrm, AlbumMaterialsOrm, album_members
 from .schemas import CreateAlbum
@@ -34,17 +34,33 @@ class AlbumsRepository(BaseRepository):
             .order_by(AlbumMaterialsOrm.album_id, AlbumMaterialsOrm.published_at.desc())
             .subquery()
         )
+        # Под названием альбома человеку нужны две вещи: сколько там фотографий
+        # и когда добавляли последние. Считаем их здесь, одним запросом —
+        # отдельная выборка материалов на каждый альбом стоила бы дороже всего
+        # экрана.
+        stats_subq = (
+            select(
+                AlbumMaterialsOrm.album_id.label("album_id"),
+                func.count().label("materials_count"),
+                func.max(AlbumMaterialsOrm.published_at).label("last_added_at"),
+            )
+            .group_by(AlbumMaterialsOrm.album_id)
+            .subquery()
+        )
         query = (
-            select(AlbumsOrm, cover_subq.c.link)
+            select(AlbumsOrm, cover_subq.c.link, stats_subq.c.materials_count, stats_subq.c.last_added_at)
             .join(album_members, album_members.c.album_id == AlbumsOrm.id)
             .outerjoin(cover_subq, cover_subq.c.album_id == AlbumsOrm.id)
+            .outerjoin(stats_subq, stats_subq.c.album_id == AlbumsOrm.id)
             .where(album_members.c.user_id == user_id)
             .order_by(AlbumsOrm.created_at.desc())
         )
         res = await self.session.execute(query)
         albums = []
-        for album, cover in res.unique().all():
+        for album, cover, count, last_added in res.unique().all():
             album.cover = cover
+            album.materials_count = count or 0
+            album.last_added_at = last_added
             albums.append(album)
         return albums
 
