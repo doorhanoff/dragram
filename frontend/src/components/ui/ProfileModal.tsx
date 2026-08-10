@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { IconX, IconMessage2, IconAlignLeft } from '@tabler/icons-react'
 import Avatar from './Avatar'
 import { api } from '../../api'
+import { withCache } from '../../dataCache'
 import { fmtPresence } from '../../utils'
 import { useBackHandler } from '../../hooks/useBackHandler'
 
@@ -19,7 +20,11 @@ export default function ProfileModal({ userId, isMe, onClose, onStartChat }: Pro
   useBackHandler(onClose)
 
   useEffect(() => {
-    api.getUser(userId).then(setUser).catch(() => {}).finally(() => setLoading(false))
+    // Профиль тоже кешируем: без сети иначе пустое окно с «Загрузка…».
+    // Статус «в сети» при этом может быть вчерашним — но он и так живёт
+    // минуту, а имя с фотографией не меняются.
+    withCache<any>(`user:${userId}`, () => api.getUser(userId), setUser)
+      .finally(() => setLoading(false))
   }, [userId])
 
   return (

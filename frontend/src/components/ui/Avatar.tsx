@@ -1,5 +1,5 @@
 import React from 'react'
-import { mediaSrc } from '../../api'
+import { useCachedImage } from '../../hooks/useCachedImage'
 
 const PALETTE = [
   ['#F0C29B','#9C5A28'], ['#9FC2D2','#2E586B'], ['#B7C3A8','#46562F'],
@@ -29,12 +29,16 @@ interface AvatarProps {
 export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 34, className = '' }: AvatarProps) {
   const [bg, fg] = paletteFrom(id)
   const style = { width: size, height: size, fontSize: Math.round(size * 0.36) }
+  // Аватарки шли мимо кеша обычным <img>, хотя это самые частые картинки в
+  // приложении: они на каждой строке списка чатов, в шапке и под каждым
+  // сообщением в группе. Без сети список выглядел безликим.
+  const src = useCachedImage(imageUrl)
 
   return (
     <div className={`relative flex-shrink-0 ${className}`} style={{ width: size, height: size }}>
       {imageUrl ? (
         <img
-          src={mediaSrc(imageUrl)}
+          src={src}
           alt={name}
           loading="lazy"
           className="rounded-full object-cover w-full h-full"

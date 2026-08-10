@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { api } from './api'
+import { api, isNetworkError, isGateError } from './api'
 import {
   generateKeypairFull, storeKeypair, loadKeypair, exportPublicKey,
   deriveSharedKey, generateGroupKey, encryptGroupKey, decryptGroupKey,
@@ -9,7 +9,7 @@ import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from 
 import { canReadContacts, collectContactHashes } from './nativeContacts'
 import { readCachedMessages, writeCachedMessages, appendCachedMessage, dropCachedMessage, clearMessageCache } from './messageCache'
 import { clearMediaCache } from './mediaCache'
-import { withCache, clearDataCache } from './dataCache'
+import { withCache, clearDataCache, readCache, writeCache, sweepCaches } from './dataCache'
 import { showToast } from './utils'
 
 import Auth              from './components/Auth'
@@ -23,6 +23,7 @@ import PostThread        from './components/posts/PostThread'
 import CreatePostModal   from './components/posts/CreatePostModal'
 import ProfileScreen     from './components/ui/ProfileScreen'
 import ContactsIntro     from './components/ui/ContactsIntro'
+import OfflineBar        from './components/ui/OfflineBar'
 import { sayError }       from './components/ui/dialogs'
 import AlbumsList        from './components/albums/AlbumsList'
 import AlbumGallery      from './components/albums/AlbumGallery'
@@ -94,6 +95,34 @@ async function decryptMsgs(msgs: Message[], key: any): Promise<Message[]> {
     }
     return dec
   }))
+}
+
+/**
+ * Профиль последнего входа.
+ *
+ * Без сети сервер не может подтвердить сессию — но это не значит, что человек
+ * вышел. Раньше любой обрыв связи при запуске приводил на форму входа: дверь
+ * не отвечала, /auth/me не отвечал, и приложение считало, что мы не вошли.
+ * Для пожилого человека это тупик: пароль он, скорее всего, не вспомнит.
+ *
+ * Лежит в localStorage, а не в IndexedDB, намеренно: читается синхронно, до
+ * первой отрисовки, поэтому форма входа не успевает мелькнуть. Здесь только
+ * имя, телефон и аватар — то, что и так показано на экране; ключей нет.
+ */
+const SESSION_KEY = 'dragram_session_user'
+
+function readCachedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? JSON.parse(raw) as User : null
+  } catch { return null }
+}
+
+function writeCachedUser(u: User | null) {
+  try {
+    if (u) localStorage.setItem(SESSION_KEY, JSON.stringify(u))
+    else localStorage.removeItem(SESSION_KEY)
+  } catch {}
 }
 
 /** Строка под именем чата: «Вы: …», «Мама: …», «📷 Фото». */
@@ -221,6 +250,9 @@ export default function App() {
       wsRef.current?.close(); activeChatRef.current = null
       loadedChats.current.clear(); chatKeysRef.current.clear()
       clearNativeKeys()
+      // Сервер отверг обновление токена — сессии действительно нет,
+      // сохранённый профиль больше не даёт права работать офлайн.
+      writeCachedUser(null)
       setUser(null); setChats([]); setCurrentChatId(null); setMessages({})
     }
     window.addEventListener('auth:expired', h)
@@ -264,8 +296,10 @@ export default function App() {
         return
       }
 
-      // IndexedDB пуст — нужен пароль для работы с бэкапом
-      if (!password) { setUser(null); return }
+      // IndexedDB пуст — нужен пароль для работы с бэкапом. Решение, что
+      // делать дальше, принимает вызывающий: без сети выходить некуда, и
+      // выкидывать человека на форму входа нельзя.
+      if (!password) return 'need-password'
 
       // 2. Проверяем бэкап на сервере
       const backupRes = await api.getKeyBackup().catch(() => null)
@@ -302,11 +336,38 @@ export default function App() {
       // Тикет на медиа берём до первой отрисовки: без него ссылки на
       // картинки не подписаны, и хранилище их не отдаст.
       await api.ensureMediaTicket().catch(() => {})
+      writeCachedUser(u)
       setUser(u); userIdRef.current = u.id
-      await setupCrypto(u.id, null)
+      // Ключей на устройстве нет, а пароля здесь неоткуда взять — достать
+      // их можно только из бэкапа, то есть после ввода пароля. Связь при
+      // этом есть, поэтому просим войти заново.
+      if (await setupCrypto(u.id, null) === 'need-password') {
+        writeCachedUser(null)
+        setUser(null)
+        return
+      }
       loadChats()
-    } catch {
-      // Не вошли — покажется форма входа
+    } catch (e) {
+      // Нет сети — сессия при этом цела, а ключи лежат на устройстве.
+      // Поднимаем прошлый профиль и работаем на сохранённом: переписка,
+      // альбомы и картинки уже здесь.
+      if (isNetworkError(e)) {
+        const cached = readCachedUser()
+        if (cached) {
+          setUser(cached); userIdRef.current = cached.id
+          // Даже если ключей не нашлось — остаёмся в приложении. Войти без
+          // сети всё равно невозможно, а переписка расшифруется, когда связь
+          // вернётся и ключи приедут из бэкапа.
+          await setupCrypto(cached.id, null)
+          loadChats()
+        }
+        return
+      }
+      // Нужен пропуск от двери — сессия тоже цела, профиль не трогаем:
+      // экран двери покажет отдельный обработчик gate:required.
+      if (isGateError(e)) return
+      // А вот это уже настоящий отказ сервера: тогда форма входа.
+      writeCachedUser(null)
     }
   }, [])
 
@@ -316,9 +377,25 @@ export default function App() {
         setGateOk(s.unlocked)
         if (s.unlocked) await loadSession()
       })
-      .catch(() => {})
+      .catch(async e => {
+        // Без сети про дверь не спросить. Если на этом устройстве уже
+        // входили, запирать снова незачем: наружу всё равно ни один запрос
+        // не уйдёт, а когда связь вернётся, сервер сам потребует пропуск
+        // (403 → gate:required) и дверь покажется.
+        if (isNetworkError(e) && readCachedUser()) {
+          setGateOk(true)
+          await loadSession()
+        }
+      })
       .finally(() => setLoading(false))
   }, [loadSession])
+
+  // Уборка кешей: не чаще раза в сутки, и уже после запуска — она не должна
+  // соревноваться с первой отрисовкой за диск.
+  useEffect(() => {
+    const id = setTimeout(() => { sweepCaches().catch(() => {}) }, 5000)
+    return () => clearTimeout(id)
+  }, [])
 
   // Пропуск протух прямо во время работы — возвращаемся к двери.
   useEffect(() => {
@@ -335,11 +412,11 @@ export default function App() {
   }, [user])
 
   const loadChats = useCallback(async () => {
-    try {
-      const list: Chat[] = await api.getChats() || []
+    const myId = userIdRef.current
+    // Справочник имён для push-уведомлений: сервер шлёт только id, имя
+    // подставляет само устройство (см. nativeKeys.syncNames).
+    const applyList = (list: Chat[]) => {
       setChats(list)
-      // Справочник имён для push-уведомлений: сервер шлёт только id, имя
-      // подставляет само устройство (см. nativeKeys.syncNames).
       const names: Record<string, string> = {}
       for (const chat of list) {
         const members = chat.members || []
@@ -350,7 +427,27 @@ export default function App() {
         if (title) names[chat.id] = title
       }
       syncNames(names)
-    } catch {}
+    }
+
+    // Сохранённое показываем сразу, не дожидаясь сети: список чатов — первый
+    // экран приложения, и ждать на нём ответа сервера незачем даже когда
+    // интернет есть. Сеть ответит — перерисуем.
+    let gotFresh = false
+    if (myId && !chatsRef.current.length) {
+      readCache<Chat[]>(`chats:${myId}`).then(cached => {
+        if (cached?.length && !gotFresh) applyList(cached)
+      })
+    }
+
+    try {
+      const list: Chat[] = await api.getChats() || []
+      gotFresh = true
+      applyList(list)
+      if (myId) writeCache(`chats:${myId}`, list)
+    } catch {
+      // Нет сети — на экране остаётся сохранённое. Раньше здесь было пусто,
+      // и офлайн выглядел как «все чаты пропали».
+    }
   }, [])
 
   /**
@@ -738,6 +835,7 @@ export default function App() {
     wsRef.current?.close(); activeChatRef.current = null
     loadedChats.current.clear(); chatKeysRef.current.clear()
     clearNativeKeys()
+    writeCachedUser(null)
     clearMessageCache()
     clearMediaCache()
     clearDataCache()
@@ -759,8 +857,24 @@ export default function App() {
   )
   // Дверь стоит перед формой входа: пока ответы не даны, приложение не
   // показывает даже её. Настоящая проверка — на сервере, здесь только экран.
-  if (gateOk === false) return <Gate onUnlocked={() => { setGateOk(true); loadSession() }} />
-  if (!user) return <Auth onLogin={handleLogin} />
+  // Полоса нужна и здесь: если человек всё же оказался на входе без сети,
+  // он должен видеть причину, а не гадать, почему пароль «не подходит».
+  if (gateOk === false) return (
+    <div className="h-full flex flex-col bg-bg">
+      <OfflineBar />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <Gate onUnlocked={() => { setGateOk(true); loadSession() }} />
+      </div>
+    </div>
+  )
+  if (!user) return (
+    <div className="h-full flex flex-col bg-bg">
+      <OfflineBar />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <Auth onLogin={handleLogin} />
+      </div>
+    </div>
+  )
 
   const chatPanel = (
     <ChatList
@@ -843,6 +957,8 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg">
+      <OfflineBar />
+
       {/* Desktop */}
       <div className="hidden md:flex flex-1 min-h-0">
         <Sidebar user={user} active={activeTab} onNavigate={setActiveTab} />

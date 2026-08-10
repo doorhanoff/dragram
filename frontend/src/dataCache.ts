@@ -59,6 +59,59 @@ export async function writeCache(key: string, value: unknown): Promise<void> {
   } catch {}
 }
 
+/**
+ * Выбрасывает протухшие записи.
+ *
+ * Само чтение и так не отдаёт устаревшее, но записи при этом оставались
+ * лежать: удалённый альбом или чат, в который больше не заходят, занимали
+ * место вечно. Пройтись курсором дешевле, чем городить индекс по дате.
+ */
+export async function sweepDataCache(): Promise<number> {
+  try {
+    const db = await openDB()
+    return await new Promise<number>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      const store = tx.objectStore(STORE)
+      const cutoff = Date.now() - MAX_AGE_MS
+      let removed = 0
+      const req = store.openCursor()
+      req.onsuccess = e => {
+        const cursor = (e.target as IDBRequest).result as IDBCursorWithValue | null
+        if (!cursor) return
+        const rec = cursor.value
+        if (!rec || typeof rec.savedAt !== 'number' || rec.savedAt < cutoff) {
+          cursor.delete()
+          removed++
+        }
+        cursor.continue()
+      }
+      tx.oncomplete = () => resolve(removed)
+      tx.onerror = e => reject((e.target as IDBTransaction).error)
+    })
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Уборка всех кешей разом — вызывается при запуске, но не чаще раза в сутки.
+ *
+ * Чаще незачем: сроки жизни здесь измеряются сутками и неделями, а каждый
+ * проход — это обход двух хранилищ на устройстве, которое и так небыстрое.
+ */
+const SWEPT_AT_KEY = 'dragram_cache_swept_at'
+const SWEEP_EVERY_MS = 24 * 60 * 60 * 1000
+
+export async function sweepCaches(force = false): Promise<void> {
+  try {
+    const last = Number(localStorage.getItem(SWEPT_AT_KEY) || 0)
+    if (!force && Date.now() - last < SWEEP_EVERY_MS) return
+    localStorage.setItem(SWEPT_AT_KEY, String(Date.now()))
+  } catch {}
+  const { sweepMediaCache } = await import('./mediaCache')
+  await Promise.all([sweepDataCache(), sweepMediaCache()])
+}
+
 export async function clearDataCache(): Promise<void> {
   try {
     const db = await openDB()

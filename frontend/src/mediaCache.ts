@@ -127,6 +127,35 @@ export async function putCachedMedia(url: string, blob: Blob): Promise<void> {
   }
 }
 
+/**
+ * Выбрасывает файлы, которые давно не открывали.
+ *
+ * Потолка по размеру мало: пока кеш не упёрся в 200 МБ, в нём вечно лежат
+ * картинки из чатов, куда больше не заходят, — а это фотографии семьи на
+ * устройстве, которое могут потерять. Месяц без обращения — достаточный срок,
+ * чтобы считать файл ненужным: понадобится снова — скачается.
+ */
+const MAX_IDLE_MS = 30 * 24 * 60 * 60 * 1000
+
+export async function sweepMediaCache(maxIdleMs = MAX_IDLE_MS): Promise<number> {
+  try {
+    const db = await openDB()
+    const index = await readIndex(db)
+    const cutoff = Date.now() - maxIdleMs
+    let removed = 0
+    for (const [key, meta] of Object.entries(index)) {
+      if (meta.usedAt >= cutoff) continue
+      await idbDelete(db, STORE, key)
+      delete index[key]
+      removed++
+    }
+    if (removed) await idbPut(db, META, 'index', index)
+    return removed
+  } catch {
+    return 0
+  }
+}
+
 /** Сколько сейчас занято, в байтах — для экрана настроек. */
 export async function cacheSize(): Promise<number> {
   try {

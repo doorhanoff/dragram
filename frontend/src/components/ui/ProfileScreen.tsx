@@ -7,6 +7,7 @@ import Avatar from './Avatar'
 import AppearanceScreen from './AppearanceScreen'
 import { ask, sayError } from './dialogs'
 import { api } from '../../api'
+import { withCache } from '../../dataCache'
 import { useTheme } from '../../theme'
 import { useBackHandler } from '../../hooks/useBackHandler'
 
@@ -45,8 +46,10 @@ export default function ProfileScreen({ userId, onLogout, onOpenSaved, onSyncCon
 
   useEffect(() => {
     // Свой профиль берём через /auth/me: телефон отдаётся только там —
-    // в чужих профилях его больше нет.
-    api.getMe().then(setUser).catch(() => {}).finally(() => setLoading(false))
+    // в чужих профилях его больше нет. Кешируем: без сети иначе не посмотреть
+    // даже собственный номер, а его как раз чаще всего и ищут, чтобы продиктовать.
+    withCache<any>(`me:${userId}`, () => api.getMe(), setUser)
+      .finally(() => setLoading(false))
   }, [userId])
 
   async function confirmDelete() {

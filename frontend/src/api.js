@@ -81,15 +81,61 @@ export function gateHeaders() {
 }
 
 /** Связь оборвалась — сервер ничего не ответил. Сессия при этом цела. */
-class NetworkError extends Error {}
+export class NetworkError extends Error {}
 /** Нужен пропуск от двери. Сессия тоже цела — разлогинивать нельзя. */
-class GateError extends Error {}
+export class GateError extends Error {}
+
+/**
+ * Связь оборвалась — сервер ничего не сказал.
+ *
+ * Отличать это от «сервер ответил: вы не вошли» обязательно: на телефоне сеть
+ * пропадает по десять раз на дню, и каждый такой обрыв нельзя принимать за
+ * конец сессии.
+ */
+export function isNetworkError(e) {
+  return e instanceof NetworkError
+}
+
+/** Нужен пропуск от двери; сессия при этом цела. */
+export function isGateError(e) {
+  return e instanceof GateError
+}
+
+/** Проходил ли человек дверь на этом устройстве. */
+export function hasGateToken() {
+  return !!_gateToken
+}
 
 /** fetch, у которого обрыв связи отличим от ответа сервера. */
+// Связь считаем по факту наших же запросов, а не по navigator.onLine: тот
+// говорит лишь, что устройство к чему-то подключено. Событие шлём только на
+// смене состояния — иначе каждый запрос дёргал бы перерисовку.
+let _online = true
+
+function setOnline(value) {
+  if (_online === value) return
+  _online = value
+  window.dispatchEvent(new Event(value ? 'net:online' : 'net:offline'))
+}
+
+/**
+ * Есть ли сейчас связь с сервером.
+ *
+ * Читать состояние, а не только слушать события, обязательно: первые запросы
+ * уходят на старте приложения, до того как отрисуется полоса «нет интернета»,
+ * и событие о неудаче она бы просто не услышала.
+ */
+export function isOnline() {
+  return _online && navigator.onLine !== false
+}
+
 async function fetchOrThrow(url, opts) {
   try {
-    return await fetch(url, opts)
+    const res = await fetch(url, opts)
+    setOnline(true)
+    return res
   } catch (e) {
+    setOnline(false)
     throw new NetworkError(e?.message || 'network')
   }
 }
