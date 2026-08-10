@@ -6,12 +6,13 @@ import {
 import { parseDate, fmtPresence, showToast } from '../../utils'
 import MessageBubble, { shortContent } from './MessageBubble'
 import MessageActions from './MessageActions'
+import AttachSheet from './AttachSheet'
 import ForwardModal from './ForwardModal'
 import Avatar from '../ui/Avatar'
 import ProfileModal from '../ui/ProfileModal'
 import { ask, say, sayError } from '../ui/dialogs'
 import type { Chat, Message } from '../../types'
-import { api } from '../../api'
+import { api, mediaSrc } from '../../api'
 
 function chatName(chat: Chat, myId: string): string {
   if (chat.name) return chat.name
@@ -62,10 +63,15 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
   const [recording, setRecording]     = useState(false)
   const [recordMs,  setRecordMs]      = useState(0)
   const [sendingAudio, setSendingAudio] = useState(false)
+  // Что прикрепляем: сначала спрашиваем, потом открываем нужный выбор.
+  // Один общий выбор открывал файловый менеджер, где до фотографий ещё надо
+  // догадаться дойти.
+  const [attachOpen, setAttachOpen] = useState(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef     = useRef<HTMLInputElement>(null)
+  const docRef      = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef   = useRef<Blob[]>([])
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -251,6 +257,18 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
     items.push({ type: 'msg', msg: m, key: (m.id || (m as any)._id || m.client_id || String(i)) })
   })
 
+  // Все фотографии переписки — чтобы открытое фото листалось пальцем по чату,
+  // а не висело в одиночку. link — исходный адрес: он нужен для пересылки,
+  // подписанный тикетом url для этого не годится.
+  const photos = messages
+    .filter(m => m.type === 'image')
+    .map(m => ({ url: mediaSrc(m.text), link: m.text }))
+  const photoIndex = new Map<string, number>()
+  messages.filter(m => m.type === 'image').forEach((m, i) => {
+    const key = m.id || (m as any)._id || m.client_id
+    if (key) photoIndex.set(key, i)
+  })
+
   const title    = chatName(chat, userId)
   const imgUrl   = isGroup ? chat.image_url : other?.image_url
   const isOnline = !isGroup && other?.is_active
@@ -355,6 +373,8 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                   : undefined
                 }
                 onQuoteClick={scrollToMessage}
+                photos={photos}
+                photoIndex={photoIndex.get(item.key)}
               />
             </div>
           )
@@ -378,7 +398,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
             <div className="text-xs font-bold text-accent">
               {(replyTo.sender_id || replyTo.writer) === userId ? 'Вы' : (replyTo.sender_name || 'Сообщение')}
             </div>
-            <div className="text-sm text-muted ellipsis">{shortContent(replyTo.type, replyTo.text)}</div>
+            <div className="text-sm text-muted ellipsis">{shortContent(replyTo.type, replyTo.text, replyTo.file_name)}</div>
           </div>
           <button onClick={() => setReplyTo(null)} aria-label="Не отвечать" className="tap-sm rounded-xl text-muted">
             <IconX size={20} stroke={2} />
@@ -405,13 +425,31 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           </>
         ) : (
           <>
-            <label
-              className={`tap rounded-2xl cursor-pointer flex-shrink-0 ${uploading ? 'pointer-events-none opacity-40 text-muted' : 'text-muted hover:text-accent'}`}
-              aria-label="Прикрепить файл"
+            <button
+              onClick={() => setAttachOpen(true)}
+              disabled={!!uploading}
+              className={`tap rounded-2xl flex-shrink-0 ${uploading ? 'opacity-40 text-muted' : 'text-muted hover:text-accent'}`}
+              aria-label="Прикрепить"
             >
               <IconPaperclip size={24} stroke={2} />
-              <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime,audio/*" hidden onChange={handleFile} />
-            </label>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,video/mp4,video/webm,video/quicktime"
+              hidden
+              onChange={handleFile}
+            />
+            {/* Документы: список типов совпадает с тем, что принимает сервер
+                (ALLOWED_DOC_TYPES). Иначе человек выберет файл, дождётся
+                загрузки и получит отказ. */}
+            <input
+              ref={docRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.rtf,.txt,.csv,.zip"
+              hidden
+              onChange={handleFile}
+            />
             <div className="flex-1 bg-surface rounded-[20px] flex items-center pl-4 pr-2 py-1 shadow-soft">
               <textarea
                 ref={textareaRef}
@@ -452,6 +490,14 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
         )}
       </div>
 
+      {attachOpen && (
+        <AttachSheet
+          onPhoto={() => { setAttachOpen(false); fileRef.current?.click() }}
+          onFile={() => { setAttachOpen(false); docRef.current?.click() }}
+          onClose={() => setAttachOpen(false)}
+        />
+      )}
+
       {actionMsg && (
         <MessageActions
           canDelete={(actionMsg.sender_id || actionMsg.writer) === userId}
@@ -475,6 +521,8 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                 text: forwardMsg.text,
                 type: forwardMsg.type,
                 thumbnail_url: forwardMsg.thumbnail_url || null,
+                // Без имени пересланный документ станет просто «Файл».
+                file_name: forwardMsg.file_name || null,
               })}
         />
       )}

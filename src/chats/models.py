@@ -27,6 +27,10 @@ class MessagesOrm(Base):
     type: Mapped[str] = mapped_column(String(10), default="text", server_default="text")
     thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Имя присланного документа. В хранилище ключ случайный, и без этой
+    # колонки получатель видел бы «a3f9c1…pdf» вместо «Договор.pdf».
+    file_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     chat_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('chats.id'))
     sender_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     is_read: Mapped[bool] = mapped_column(default=False)

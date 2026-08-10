@@ -105,6 +105,7 @@ async function buildPreview(chat: Chat, myId: string, key: any): Promise<string>
   if (last.type === 'image') body = '📷 Фото'
   else if (last.type === 'video') body = '🎥 Видео'
   else if (last.type === 'audio') body = '🎵 Голосовое сообщение'
+  else if (last.type === 'file') body = `📎 ${last.file_name || 'Файл'}`
   else if (!key) body = 'Сообщение'
   else {
     const res = await decryptMessage(last.text, key)

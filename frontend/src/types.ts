@@ -23,10 +23,11 @@ export interface Member {
 export interface LastMessage {
   id: string
   text: string
-  type: 'text' | 'image' | 'video' | 'audio'
+  type: 'text' | 'image' | 'video' | 'audio' | 'file'
   sender_id: string
   sender_name?: string | null
   created_at: string
+  file_name?: string | null
 }
 
 export interface Chat {
@@ -44,9 +45,10 @@ export interface Chat {
 export interface ReplyPreview {
   id: string
   text: string
-  type: 'text' | 'image' | 'video' | 'audio'
+  type: 'text' | 'image' | 'video' | 'audio' | 'file'
   sender_id: string
   sender_name?: string | null
+  file_name?: string | null
 }
 
 export interface Message {
@@ -56,7 +58,7 @@ export interface Message {
   // в эхе, чтобы заменить временное сообщение настоящим, а не дублировать
   client_id?: string
   text: string
-  type: 'text' | 'image' | 'video' | 'audio'
+  type: 'text' | 'image' | 'video' | 'audio' | 'file'
   sender_id?: string
   writer?: string
   sender_name?: string | null
@@ -66,6 +68,8 @@ export interface Message {
   created_at?: string
   reply_to_id?: string | null
   reply_to?: ReplyPreview | null
+  /** Имя документа: в хранилище ключ случайный, показывать его нечего. */
+  file_name?: string | null
   _msgStatus?: string
 }
 

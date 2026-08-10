@@ -10,6 +10,8 @@ import datetime
 # символов — это ~5 КБ текста сообщения.
 MAX_MESSAGE_TEXT = 8000
 MAX_MEDIA_URL = 500
+# Имя файла показывается получателю как есть — длинное разорвало бы вёрстку.
+MAX_FILE_NAME = 200
 MAX_CHAT_NAME = 100
 MAX_CHAT_MEMBERS = 100
 MAX_ENCRYPTED_KEY = 2000
@@ -60,6 +62,7 @@ class LastMessage(BaseModel):
     sender_id: uuid.UUID
     sender_name: str | None = None
     created_at: datetime.datetime
+    file_name: str | None = None
 
 
 class ChatsResponse(BaseModel):
@@ -82,6 +85,7 @@ class ReplyPreview(BaseModel):
     type: str
     sender_id: uuid.UUID
     sender_name: str | None = None
+    file_name: str | None = None
 
     @classmethod
     def from_orm_msg(cls, msg) -> "ReplyPreview | None":
@@ -93,6 +97,7 @@ class ReplyPreview(BaseModel):
             type=msg.type,
             sender_id=msg.sender_id,
             sender_name=msg.sender.name if msg.sender else None,
+            file_name=getattr(msg, 'file_name', None),
         )
 
 
@@ -108,6 +113,7 @@ class MessagesResponse(BaseModel):
     created_at: datetime.datetime
     reply_to_id: uuid.UUID | None = None
     reply_to: ReplyPreview | None = None
+    file_name: str | None = None
 
     @classmethod
     def from_orm_msg(cls, msg):
@@ -120,6 +126,7 @@ class MessagesResponse(BaseModel):
             sender_name=msg.sender.name if msg.sender else None,
             is_read=msg.is_read,
             created_at=msg.created_at,
+            file_name=getattr(msg, 'file_name', None),
             reply_to_id=getattr(msg, 'reply_to_id', None),
             reply_to=ReplyPreview.from_orm_msg(getattr(msg, 'reply_to', None)),
         )
@@ -127,7 +134,7 @@ class MessagesResponse(BaseModel):
 
 class MessageDbSchema(BaseModel):
     text: str
-    type: Literal["text", "image", "video", "audio"] = "text"
+    type: Literal["text", "image", "video", "audio", "file"] = "text"
     thumbnail_url: str | None = None
     chat_id: uuid.UUID
     sender_id: uuid.UUID
@@ -145,8 +152,9 @@ class ForwardMessage(BaseModel):
     # нельзя — там его нечем открыть. Поэтому потолок длины здесь общий,
     # как у обычного сообщения.
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_TEXT)
-    type: Literal["text", "image", "video", "audio"]
+    type: Literal["text", "image", "video", "audio", "file"]
     thumbnail_url: str | None = Field(default=None, max_length=MAX_MEDIA_URL)
+    file_name: str | None = Field(default=None, max_length=MAX_FILE_NAME)
 
 
 # ── websocket / pub-sub events ──────────────────────────────────────────────
@@ -157,7 +165,7 @@ class ForwardMessage(BaseModel):
 class WSSendMessage(BaseModel):
     event: Literal["message"] = "message"
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_TEXT)
-    type: Literal["text", "image", "video", "audio"] = "text"
+    type: Literal["text", "image", "video", "audio", "file"] = "text"
     # Клиентский id для оптимистичного UI: сервер не хранит его, а просто
     # возвращает в MessageEvent, чтобы отправитель сопоставил эхо со своим
     # локально показанным сообщением вместо дубля.
@@ -171,7 +179,7 @@ class MessageEvent(BaseModel):
     event: Literal["message"] = "message"
     id: uuid.UUID
     text: str
-    type: Literal["text", "image", "video", "audio"] = "text"
+    type: Literal["text", "image", "video", "audio", "file"] = "text"
     thumbnail_url: str | None = None
     sender_id: uuid.UUID
     sender_name: str | None = None
@@ -180,6 +188,7 @@ class MessageEvent(BaseModel):
     client_id: str | None = None
     reply_to_id: uuid.UUID | None = None
     reply_to: ReplyPreview | None = None
+    file_name: str | None = None
 
     @classmethod
     def from_message(cls, msg, client_id: str | None = None) -> "MessageEvent":
@@ -195,6 +204,7 @@ class MessageEvent(BaseModel):
             client_id=client_id,
             reply_to_id=msg.reply_to_id,
             reply_to=ReplyPreview.from_orm_msg(msg.reply_to),
+            file_name=msg.file_name,
         )
 
 

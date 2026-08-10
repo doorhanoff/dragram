@@ -10,7 +10,8 @@ interface Props {
   images: string[]
   startIndex?: number
   onClose: () => void
-  onForward?: () => void
+  /** Индекс — какое именно фото сейчас на экране: их можно листать. */
+  onForward?: (index: number) => void
 }
 
 function dist(a: React.Touch, b: React.Touch) {
@@ -171,7 +172,7 @@ export default function ImageLightbox({ images, startIndex = 0, onClose, onForwa
         </button>
         {onForward && (
           <button
-            onClick={e => { e.stopPropagation(); onForward() }}
+            onClick={e => { e.stopPropagation(); onForward(idx) }}
             aria-label="Переслать"
             className="w-12 h-12 rounded-full bg-black/45 hover:bg-black/65 flex items-center justify-center text-white transition-colors"
           >

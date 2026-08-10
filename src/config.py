@@ -146,6 +146,31 @@ ALLOWED_MEDIA_TYPES = {
     "audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4", "audio/wav",
 }
 
+# Документы — только для сообщений в чате. В альбомы и посты они не годятся:
+# альбом это фотографии, и файл в сетке нечем показать.
+#
+# Список закрытый и намеренно без исполняемого: apk, exe и скрипты пересылать
+# через семейный мессенджер незачем, а вот прислать «фотографию» с таким
+# содержимым — обычный способ обмануть получателя.
+ALLOWED_DOC_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/rtf",
+    "application/zip",
+    "text/plain",
+    "text/csv",
+}
+
+# Что вообще можно приложить к сообщению.
+ALLOWED_CHAT_ATTACHMENTS = ALLOWED_MEDIA_TYPES | ALLOWED_DOC_TYPES
+
 # Общий потолок размера одного загружаемого файла (аватары, посты, альбомы).
 # Для сообщений чата действуют свои лимиты по типу — см. chats/service.py.
 MAX_FILE_SIZE = 25 * 1024 * 1024

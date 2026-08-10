@@ -16,12 +16,16 @@ from .repo import ChatsRepository
 from .schemas import (
     CreateChat, CreateChatDb, MessageDbSchema, ChatKeyItem, ForwardMessage,
     MessageEvent, ReadEvent, DeleteEvent, WSSendMessage, LastMessage,
+    MAX_FILE_NAME,
 )
 from .models import ChatsOrm, MessagesOrm
 from ..auth.models import UsersOrm
 from ..s3.service import S3Service
 from ..notifications.service import NotificationsService
-from src.config import ALLOWED_MEDIA_TYPES, ALLOWED_IMAGE_TYPES
+from src.config import (
+    ALLOWED_MEDIA_TYPES, ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES,
+    ALLOWED_CHAT_ATTACHMENTS,
+)
 from src.core.quota import UploadQuota
 from src.core.rate_limit import hit_counter
 from src.core.presence import last_seen_key, online_key, parse_last_seen, touch_presence
@@ -32,6 +36,7 @@ NOTIFICATION_BODY_BY_TYPE = {
     "image": "\U0001F4F7 Фото",
     "video": "\U0001F3A5 Видео",
     "audio": "\U0001F3B5 Голосовое сообщение",
+    "file": "\U0001F4CE Файл",
 }
 DEFAULT_NOTIFICATION_BODY = NOTIFICATION_BODY_BY_TYPE["text"]
 
@@ -45,6 +50,20 @@ MAX_PUSH_CIPHERTEXT = 2500
 MAX_IMAGE_SIZE = 1024 * 1024 * 25
 MAX_VIDEO_SIZE = 1024 * 1024 * 200
 MAX_AUDIO_SIZE = 1024 * 1024 * 50
+MAX_DOC_SIZE = 1024 * 1024 * 50
+
+
+def _clean_file_name(name: str | None) -> str:
+    """Имя документа приходит от отправителя и показывается получателю как
+    есть, поэтому от него остаётся только имя файла: путь и управляющие
+    символы отрезаются, длина ограничивается."""
+    if not name:
+        return "Файл"
+    name = name.replace("\\", "/").split("/")[-1]
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+    if not name:
+        return "Файл"
+    return name[:MAX_FILE_NAME]
 
 # Сообщений в websocket на пользователя. Каждое — это запись в БД, публикация
 # в Redis и push всем офлайн-участникам, поэтому лимит на соединения
@@ -142,6 +161,7 @@ class ChatsService:
                 sender_id=msg.sender_id,
                 sender_name=msg.sender.name if msg.sender else None,
                 created_at=msg.created_at,
+                file_name=msg.file_name,
             ) if msg else None
 
         # Свежий разговор — первым: на это человек полагается не задумываясь.
@@ -190,10 +210,11 @@ class ChatsService:
         user: UsersOrm,
         chat: ChatsOrm,
         text: str,
-        type: Literal["text", "image", "video", "audio"] = "text",
+        type: Literal["text", "image", "video", "audio", "file"] = "text",
         thumbnail_url: str | None = None,
         client_id: str | None = None,
         reply_to_id: uuid.UUID | None = None,
+        file_name: str | None = None,
     ) -> MessageEvent:
         # Отвечать можно только на сообщение из этого же чата: иначе ответом
         # с чужим id в чат утекала бы цитата из другой переписки.
@@ -202,6 +223,7 @@ class ChatsService:
         message_db = MessageDbSchema(
             text=text, type=type, thumbnail_url=thumbnail_url,
             sender_id=user.id, chat_id=chat.id, reply_to_id=reply_to_id,
+            file_name=file_name,
         )
         msg = await self.repo.create_message(message_db)
 
@@ -215,7 +237,7 @@ class ChatsService:
     async def send_media_message(
         self, user: UsersOrm, file: UploadFile, chat: ChatsOrm, thumbnail: UploadFile | None = None
     ) -> MessageEvent:
-        if file.content_type not in ALLOWED_MEDIA_TYPES:
+        if file.content_type not in ALLOWED_CHAT_ATTACHMENTS:
             raise InvalidFileType
         # Тип и размер проверяем ДО загрузки: отвергнутый файл не должен
         # успеть попасть в хранилище.
@@ -223,6 +245,8 @@ class ChatsService:
             msg_type, max_size = "video", MAX_VIDEO_SIZE
         elif file.content_type.startswith("audio/"):
             msg_type, max_size = "audio", MAX_AUDIO_SIZE
+        elif file.content_type in ALLOWED_DOC_TYPES:
+            msg_type, max_size = "file", MAX_DOC_SIZE
         else:
             msg_type, max_size = "image", MAX_IMAGE_SIZE
         if file.size and file.size > max_size:
@@ -238,7 +262,15 @@ class ChatsService:
             except Exception:
                 logger.warning("Video thumbnail upload failed, sending without preview", exc_info=True)
 
-        return await self.send_message(user, chat, text=url, type=msg_type, thumbnail_url=thumbnail_url)
+        # Имя документа приходит от отправителя, то есть снаружи: режем путь и
+        # длину. Иначе получатель увидел бы «../../etc/passwd» или строку на
+        # килобайт, а сохранение пошло бы мимо папки загрузок.
+        file_name = _clean_file_name(file.filename) if msg_type == "file" else None
+
+        return await self.send_message(
+            user, chat, text=url, type=msg_type,
+            thumbnail_url=thumbnail_url, file_name=file_name,
+        )
 
     async def forward_message(self, user: UsersOrm, data: ForwardMessage, chat: ChatsOrm) -> MessageEvent:
         # Пересылается ссылка на файл, а не сам файл, поэтому она обязана вести
@@ -254,6 +286,7 @@ class ChatsService:
             await self._check_message_rate(user.id)
         return await self.send_message(
             user, chat, text=data.text, type=data.type, thumbnail_url=data.thumbnail_url,
+            file_name=_clean_file_name(data.file_name) if data.type == "file" else None,
         )
 
     async def notify_new_message(self, chat: ChatsOrm, sender: UsersOrm, event: MessageEvent) -> None:

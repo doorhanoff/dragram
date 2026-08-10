@@ -217,5 +217,8 @@ async def send_media_message(
         event = await service.send_media_message(user=user, file=file, chat=chat, thumbnail=thumbnail)
         return {"url": event.text}
     except InvalidFileType:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Allowed: jpeg, png, webp, gif, mp4, webm, quicktime, mp3, ogg, wav")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Такой файл отправить нельзя. Можно фото, видео, звук, "
+                   "а также pdf, документы Word и Excel, txt и zip.",
+        )
