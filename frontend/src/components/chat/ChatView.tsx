@@ -297,23 +297,21 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       </div>
 
       {/* Messages — лента растёт снизу вверх: последнее сообщение всегда рядом
-          с полем ввода, а не прижато к шапке с пустотой под ним. */}
+          с полем ввода, а не прижато к шапке с пустотой под ним.
+          Прижимает mt-auto у внутренней обёртки, а НЕ justify-end у самого
+          контейнера прокрутки: при justify-end длинная переписка уезжает за
+          верхний край, туда нельзя долистать, и сообщения налезают друг на
+          друга. mt-auto же сам обращается в ноль, как только содержимое
+          перестаёт помещаться. */}
       <div
         ref={scrollerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-[18px] py-[14px] flex flex-col justify-end gap-3"
+        className="flex-1 min-h-0 overflow-y-auto px-[18px] py-[14px] flex flex-col"
         onScroll={() => {
           if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null }
         }}
       >
-        {/* Load more */}
-        {hasMore && messages.length >= 50 && (
-          <button onClick={loadMore} disabled={loadingMore}
-            className="self-center flex items-center gap-1 text-sm text-muted border border-border rounded-full px-4 py-2 hover:border-accent hover:text-accent transition-colors disabled:opacity-50">
-            <IconChevronUp size={14} stroke={2} />
-            {loadingMore ? 'Загрузка…' : 'Загрузить ещё'}
-          </button>
-        )}
-
+        {/* Пустой чат — по центру свободного места, поэтому стоит снаружи
+            прижатой вниз обёртки. */}
         {messages.length === 0 && !uploading && (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8 gap-2">
             <p className="text-xl font-bold text-primary">Здесь пока пусто</p>
@@ -322,6 +320,16 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
               Даже мы не видим, что вы пишете друг другу.
             </p>
           </div>
+        )}
+
+       <div className="mt-auto flex flex-col gap-3">
+        {/* Load more */}
+        {hasMore && messages.length >= 50 && (
+          <button onClick={loadMore} disabled={loadingMore}
+            className="self-center flex items-center gap-1 text-sm text-muted border border-border rounded-full px-4 py-2 hover:border-accent hover:text-accent transition-colors disabled:opacity-50">
+            <IconChevronUp size={14} stroke={2} />
+            {loadingMore ? 'Загрузка…' : 'Загрузить ещё'}
+          </button>
         )}
 
         {items.map(item => {
@@ -388,6 +396,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
             </div>
           </div>
         )}
+       </div>
       </div>
 
       {/* Ответ: на что отвечаем */}
@@ -407,7 +416,18 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
       )}
 
       {/* Input */}
-      <div className="bg-bg px-2 py-2 flex items-center gap-1 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+      {/* Отступ снизу с запасом на системную полосу: на телефонах с тремя
+          кнопками (треугольник, круг, квадрат) она рисуется поверх страницы,
+          и поле ввода оказывалось под ней. Считаем в calc, а не классом
+          pb-safe: рядом стоит py-2, и какое из двух правил победит —
+          зависит от порядка в собранном CSS. */}
+      <div
+        className="bg-bg px-2 pt-2 flex items-center gap-1 flex-shrink-0"
+        style={{
+          borderTop: '1px solid var(--border)',
+          paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+        }}
+      >
         {recording ? (
           <>
             <button

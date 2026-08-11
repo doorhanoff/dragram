@@ -225,8 +225,18 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember, onQu
         )}
 
         {/* Распорка под время: короткое сообщение остаётся в одну строку,
-            длинное переносится, и время не прилипает к последнему слову. */}
-        <span className="inline-block align-bottom" style={{ width: isSent ? 56 : 34, height: 1 }} />
+            длинное переносится, и время не прилипает к последнему слову.
+            У своих сообщений запас больше — там ещё галочки.
+            Высота — ровно строка, а не 1 px, как было. Из-за плоской распорки
+            перенесённая строка выходила почти нулевой высоты, время оставалось
+            на строке текста и садилось прямо на слова. Наложение зависело от
+            того, где именно перенеслась строка, — отсюда и «иногда».
+            Размеры в rem: время набрано долями rem и растёт вместе с
+            выбранным размером текста. */}
+        <span
+          className="inline-block align-bottom"
+          style={{ width: isSent ? '4.25rem' : '2.75rem', height: '1rem' }}
+        />
 
         <span
           className={`absolute bottom-1 right-2.5 flex items-center gap-1 whitespace-nowrap ${isSent ? 'opacity-85' : 'text-muted'}`}

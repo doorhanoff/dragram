@@ -92,6 +92,49 @@ async function evictIfNeeded(db: IDBDatabase, index: Index): Promise<Index> {
   return index
 }
 
+/**
+ * Готовые ссылки на уже поднятые с устройства файлы.
+ *
+ * Хранилище на устройстве отвечает не мгновенно, а blob-ссылка живёт только
+ * пока её не отозвали. Раньше каждый компонент делал ссылку себе и отзывал её
+ * при размонтировании — стоило прокрутить список и вернуться, как аватарка
+ * читалась заново и на кадр пропадала. Отсюда и ощущение, что картинка
+ * подгружается каждый раз.
+ *
+ * Держим по одной ссылке на файл на всё приложение и не отзываем, пока не
+ * упрёмся в потолок. Сами блобы в памяти при этом не лежат: ссылка — это
+ * указатель, браузер поднимает данные по требованию.
+ */
+const liveUrls = new Map<string, string>()
+const MAX_LIVE_URLS = 400
+
+export function getLiveUrl(key: string): string | undefined {
+  return liveUrls.get(key)
+}
+
+export function putLiveUrl(key: string, blob: Blob): string {
+  const existing = liveUrls.get(key)
+  if (existing) return existing
+  const objectUrl = URL.createObjectURL(blob)
+  liveUrls.set(key, objectUrl)
+  // Map помнит порядок вставки — вытесняем самые давние.
+  if (liveUrls.size > MAX_LIVE_URLS) {
+    for (const [k, v] of liveUrls) {
+      if (liveUrls.size <= MAX_LIVE_URLS) break
+      if (k === key) continue
+      URL.revokeObjectURL(v)
+      liveUrls.delete(k)
+    }
+  }
+  return objectUrl
+}
+
+/** Отпускает все ссылки — при выходе из аккаунта и очистке кеша. */
+export function releaseLiveUrls(): void {
+  for (const v of liveUrls.values()) URL.revokeObjectURL(v)
+  liveUrls.clear()
+}
+
 /** Отдаёт файл из кеша или null. */
 export async function getCachedMedia(url: string): Promise<Blob | null> {
   const key = storageKey(url)
@@ -169,6 +212,7 @@ export async function cacheSize(): Promise<number> {
 
 /** Очистка кеша: и по кнопке в настройках, и при выходе из аккаунта. */
 export async function clearMediaCache(): Promise<void> {
+  releaseLiveUrls()
   try {
     const db = await openDB()
     await new Promise<void>((resolve, reject) => {
