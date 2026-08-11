@@ -41,6 +41,25 @@ class UnknownMember(HTTPException):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown chat member")
 
 
+class CannotAddToPersonalChat(HTTPException):
+    """В переписке двоих ключ выводится из пары их ключей (ECDH) — третий
+    участник не смог бы расшифровать в ней ни одного сообщения, включая уже
+    отправленные. Для нескольких человек заводится группа со своим ключом."""
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="В личную переписку добавить третьего нельзя — создайте группу.",
+        )
+
+
+class TooManyChatMembers(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="В группе слишком много участников.",
+        )
+
+
 class TooManyMessages(HTTPException):
     def __init__(self):
         super().__init__(

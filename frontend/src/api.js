@@ -303,6 +303,8 @@ export const api = {
   /** Все, кто есть в Dragram, по алфавиту — список «кому написать».
    *  При полусотне родственников поиск не нужен: все помещаются в один список. */
   getDirectory:    ()              => req('GET',  '/auth/users/directory?limit=200'),
+  /** Добавить людей в группу. Ключ чата новичкам раздаёт клиент, не сервер. */
+  addChatMembers:  (id, userIds)   => req('POST', `/chats/${id}/members`, { user_ids: userIds }),
   setPublicKey:    (key)           => req('PUT',  '/auth/me/public-key', { public_key: key }),
   setKeyBackup:    (backup)        => req('PUT',  '/auth/me/key-backup', { key_backup: backup }),
   getKeyBackup:    ()              => req('GET',  '/auth/me/key-backup'),

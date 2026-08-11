@@ -11,12 +11,13 @@ from redis.asyncio import Redis
 from .exceptions import (
     ChatNotFound, NotChatMember, InvalidFileType, KeyTargetNotMember, TooLargeSize,
     ForeignMediaUrl, InvalidEvent, TooManyMessages, UnknownMember,
+    CannotAddToPersonalChat, TooManyChatMembers,
 )
 from .repo import ChatsRepository
 from .schemas import (
     CreateChat, CreateChatDb, MessageDbSchema, ChatKeyItem, ForwardMessage,
     MessageEvent, ReadEvent, DeleteEvent, WSSendMessage, LastMessage,
-    MAX_FILE_NAME,
+    MAX_FILE_NAME, MAX_CHAT_MEMBERS,
 )
 from .models import ChatsOrm, MessagesOrm
 from ..auth.models import UsersOrm
@@ -104,6 +105,35 @@ class ChatsService:
         chat = await self.repo.create(db_chat_data)
         await self.repo.commit()
         return chat
+
+    async def add_members(self, chat_id: uuid.UUID, user_ids: list[uuid.UUID], user: UsersOrm) -> ChatsOrm:
+        """Добавляет людей в группу.
+
+        Добавлять может любой участник — в семейном чате назначать «главного»
+        не за что, и права создателя пришлось бы где-то хранить (у чата такого
+        поля нет).
+
+        В переписку двоих добавить третьего нельзя: там ключ выводится из пары
+        ключей собеседников, и новый участник не расшифровал бы ничего — ни
+        старого, ни нового. Ключ группы ему выдаст клиент, у которого он
+        есть (см. /keys/missing).
+        """
+        chat = await self._get_chat_for_member(chat_id, user)
+        if len(chat.members_ids) <= 2:
+            raise CannotAddToPersonalChat()
+
+        newcomers = [uid for uid in dict.fromkeys(user_ids) if uid not in set(chat.members_ids)]
+        if not newcomers:
+            return chat
+        if not await self.repo.all_users_exist(newcomers):
+            raise UnknownMember()
+        if len(chat.members_ids) + len(newcomers) > MAX_CHAT_MEMBERS:
+            raise TooManyChatMembers()
+
+        await self.repo.add_members(chat_id, newcomers)
+        await self.repo.commit()
+        logger.info("Chat members added: chat_id=%s by=%s count=%s", chat_id, user.id, len(newcomers))
+        return await self.repo.get_by_id(chat_id)
 
     async def _get_chat_for_member(self, chat_id: uuid.UUID, user: UsersOrm) -> ChatsOrm:
         chat = await self.repo.get_by_id(chat_id)

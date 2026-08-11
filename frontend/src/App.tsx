@@ -829,6 +829,22 @@ export default function App() {
     } catch (err) { sayError('Не удалось начать чат', err) }
   }, [openChat])
 
+  /**
+   * Добавляет людей в группу и сразу выдаёт им её ключ.
+   *
+   * Выдать ключ может только клиент: сервер хранит его зашифрованным под
+   * каждого участника отдельно и сам расшифровать не может. Если этого не
+   * сделать, новичок попадёт в группу, но не прочитает в ней ни строчки —
+   * до тех пор, пока чат не откроет кто-то, у кого ключ есть.
+   */
+  const addMembers = useCallback(async (chatId: string, userIds: string[]) => {
+    const chat: Chat = await api.addChatMembers(chatId, userIds)
+    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, ...chat } : c))
+    const key = chatKeysRef.current.get(chatId)
+    if (key) await shareGroupKeyWithNewcomers(chatId, key)
+    loadChats()
+  }, [loadChats])
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => {})
     if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current)
@@ -898,6 +914,7 @@ export default function App() {
       onForwardText={forwardText}
       onBack={() => setMobileScreen('list')}
       onStartChat={(uid) => startChat(uid)}
+      onAddMembers={addMembers}
     />
   )
 

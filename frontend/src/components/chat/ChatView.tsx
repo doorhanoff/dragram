@@ -6,6 +6,7 @@ import {
 import { parseDate, fmtPresence, showToast } from '../../utils'
 import MessageBubble, { shortContent } from './MessageBubble'
 import MessageActions from './MessageActions'
+import GroupProfile from './GroupProfile'
 import AttachSheet from './AttachSheet'
 import ForwardModal from './ForwardModal'
 import Avatar from '../ui/Avatar'
@@ -49,15 +50,18 @@ interface Props {
   onForwardText?: (chatId: string, text: string) => Promise<void>
   onBack?: () => void
   onStartChat?: (userId: string) => void
+  /** Добавить людей в группу и раздать им её ключ. */
+  onAddMembers?: (chatId: string, userIds: string[]) => Promise<void>
 }
 
-export default function ChatView({ chatId, chat, messages, setMessages, userId, onSend, onForwardText, onBack, onStartChat }: Props) {
+export default function ChatView({ chatId, chat, messages, setMessages, userId, onSend, onForwardText, onBack, onStartChat, onAddMembers }: Props) {
   const [text, setText]               = useState('')
   const [actionMsg, setActionMsg]     = useState<Message | null>(null)
   const [replyTo, setReplyTo]         = useState<Message | null>(null)
   const [forwardMsg, setForwardMsg]   = useState<Message | null>(null)
   const [uploading, setUploading]     = useState<{ file: File; progress: number } | null>(null)
   const [profileId, setProfileId]     = useState<string | null>(null)
+  const [showGroup, setShowGroup]     = useState(false)
   const [hasMore,   setHasMore]       = useState(true)
   const [loadingMore,setLoadingMore]  = useState(false)
   const [recording, setRecording]     = useState(false)
@@ -287,13 +291,18 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
             <IconArrowLeft size={26} stroke={2.2} />
           </button>
         )}
-        <div onClick={() => { if (!isGroup && other) setProfileId(other.id) }} className={`flex-shrink-0 ${!isGroup ? 'cursor-pointer' : ''}`}>
+        {/* Нажатие на шапку: в личном чате — профиль собеседника, в группе —
+            её состав. Раньше в группе строка «5 участников» не вела никуда. */}
+        <button
+          onClick={() => { if (isGroup) setShowGroup(true); else if (other) setProfileId(other.id) }}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left"
+        >
           <Avatar name={title} id={chatId} imageUrl={imgUrl} isActive={isOnline} size={44} />
-        </div>
-        <div className="flex-1 min-w-0 pl-1">
-          <div className="text-lg font-bold text-primary ellipsis">{title}</div>
-          <div className={`text-sm ellipsis ${isOnline ? 'text-online' : 'text-muted'}`}>{subtitle}</div>
-        </div>
+          <span className="flex-1 min-w-0 pl-1">
+            <span className="block text-lg font-bold text-primary ellipsis">{title}</span>
+            <span className={`block text-sm ellipsis ${isOnline ? 'text-online' : 'text-muted'}`}>{subtitle}</span>
+          </span>
+        </button>
       </div>
 
       {/* Messages — лента растёт снизу вверх: последнее сообщение всегда рядом
@@ -470,7 +479,11 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
               hidden
               onChange={handleFile}
             />
-            <div className="flex-1 bg-surface rounded-[20px] flex items-center pl-4 pr-2 py-1 shadow-soft">
+            {/* Поле пониже: сам текст в нём всегда 16 px (иначе iOS зумит
+                страницу при фокусе), поэтому при мелком шрифте интерфейса
+                поле выглядело непропорционально большим. Уменьшаем поля,
+                а не текст. */}
+            <div className="flex-1 bg-surface rounded-[18px] flex items-center pl-3.5 pr-1.5 py-0.5 shadow-soft">
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -478,7 +491,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
                 onKeyDown={onKey}
                 placeholder="Сообщение…"
                 rows={1}
-                className="flex-1 bg-transparent outline-none resize-none text-lg text-primary placeholder:text-muted max-h-[110px] py-2"
+                className="flex-1 bg-transparent outline-none resize-none text-lg text-primary placeholder:text-muted max-h-[110px] py-1.5"
               />
             </div>
             {/* Одна кнопка, которая меняется: пусто — микрофон, есть текст —
@@ -509,6 +522,15 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           </>
         )}
       </div>
+
+      {showGroup && chat && (
+        <GroupProfile
+          chat={chat}
+          myId={userId}
+          onClose={() => setShowGroup(false)}
+          onAddMembers={ids => onAddMembers!(chat.id, ids)}
+        />
+      )}
 
       {attachOpen && (
         <AttachSheet

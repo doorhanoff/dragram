@@ -31,6 +31,10 @@ class CreateChat(BaseModel):
     members: list[uuid.UUID] = Field(min_length=1, max_length=MAX_CHAT_MEMBERS)
 
 
+class AddChatMembers(BaseModel):
+    user_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_CHAT_MEMBERS)
+
+
 class CreateChatDb(BaseModel):
     name: str | None = Field(default=None)
     members: list[uuid.UUID] = Field(min_length=1)

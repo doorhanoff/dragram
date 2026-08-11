@@ -20,6 +20,22 @@ class ChatsRepository(BaseRepository):
         result = await self.session.execute(query)
         return result.scalar_one()
 
+    async def add_members(self, chat_id: uuid.UUID, user_ids: list[uuid.UUID]) -> None:
+        """Добавляет участников, пропуская тех, кто уже в чате.
+
+        on_conflict_do_nothing вместо предварительной проверки: между
+        проверкой и вставкой тот же человек может успеть попасть в чат с
+        другого устройства, и тогда вставка упала бы на первичном ключе.
+        """
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        if not user_ids:
+            return
+        rows = [{"chat_id": chat_id, "user_id": uid} for uid in user_ids]
+        stmt = pg_insert(chat_members).values(rows).on_conflict_do_nothing(
+            index_elements=["chat_id", "user_id"],
+        )
+        await self.session.execute(stmt)
+
     async def all_users_exist(self, user_ids: list[uuid.UUID]) -> bool:
         from src.auth.models import UsersOrm
         res = await self.session.execute(

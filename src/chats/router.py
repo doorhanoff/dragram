@@ -17,7 +17,7 @@ from src.core.rate_limit import make_rate_limiter
 from .models import ChatsOrm
 from .schemas import (
     CreateChat, ChatsResponse, MessagesResponse,
-    WSSendMessage, SetChatKeys, ForwardMessage,
+    WSSendMessage, SetChatKeys, ForwardMessage, AddChatMembers,
 )
 from .service import ChatsService
 from src.auth.depends import get_current_user, ws_get_current_user
@@ -59,6 +59,19 @@ async def upload_photo(
 ):
     return await service.upload_photo_for_chat(chat_id, photo, user)
 
+
+
+@router.post("/{chat_id}/members", response_model=ChatsResponse,
+             dependencies=[Depends(make_rate_limiter(max_requests=20, window=60))])
+async def add_members(
+    chat_id: uuid.UUID,
+    body: AddChatMembers,
+    service: ChatsService = Depends(get_chats_service),
+    user: UsersOrm = Depends(get_current_user),
+):
+    """Добавляет людей в группу. Ключ чата новичкам выдаёт не сервер — у него
+    его нет, — а любой клиент, у которого он уже есть (см. /keys/missing)."""
+    return await service.add_members(chat_id, body.user_ids, user)
 
 
 @router.get("/", response_model=list[ChatsResponse])
