@@ -70,7 +70,10 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember, onQu
       ? <div className="flex-shrink-0 self-end mb-0.5">
           <Avatar name={senderMember.name} id={senderMember.id} imageUrl={senderMember.image_url} size={34} />
         </div>
-      : <div className="w-[34px] flex-shrink-0" />
+      // Распорка нужна только в группе — держать строй с теми сообщениями,
+      // у которых аватар есть. В личном чате аватаров нет вовсе, и она просто
+      // отодвигала все входящие от края экрана на 34 px.
+      : isGroup ? <div className="w-[34px] flex-shrink-0" /> : null
   )
 
   const mediaMeta = (

@@ -305,7 +305,7 @@ export default function ChatView({ chatId, chat, messages, setMessages, userId, 
           перестаёт помещаться. */}
       <div
         ref={scrollerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-[18px] py-[14px] flex flex-col"
+        className="flex-1 min-h-0 overflow-y-auto px-2 py-[14px] flex flex-col"
         onScroll={() => {
           if (longPressRef.current) { clearTimeout(longPressRef.current.timer); longPressRef.current = null }
         }}
