@@ -93,7 +93,8 @@ class AuthService:
         is_online, seen = await self.redis.mget([online_key(user_id), last_seen_key(user_id)])
         response = UserShortResponse.model_validate(user)
         response.is_active = is_online is not None
-        response.last_seen = parse_last_seen(seen)
+        # Redis мог перезапуститься — тогда берём отметку из базы.
+        response.last_seen = parse_last_seen(seen) or user.last_seen
         return response
 
     async def get_my_profile(self, user_id: uuid.UUID) -> MyProfileResponse | None:
@@ -207,7 +208,7 @@ class AuthService:
         for u, online, seen in zip(users, online_flags, seen_values):
             response = UserShortResponse.model_validate(u)
             response.is_active = online is not None
-            response.last_seen = parse_last_seen(seen)
+            response.last_seen = parse_last_seen(seen) or u.last_seen
             results.append(response)
         return results
 
@@ -297,7 +298,15 @@ class AuthService:
         return await self.repo.get_public_key(user_id)
 
     async def set_user_online(self, user_id: uuid.UUID) -> None:
-        await touch_presence(self.redis, user_id)
+        async def persist(moment) -> None:
+            # Не критично: не записалось — останется отметка в Redis.
+            try:
+                await self.repo.set_last_seen(user_id, moment)
+                await self.repo.commit()
+            except Exception:
+                logger.warning("Не удалось сохранить last_seen: user_id=%s", user_id, exc_info=True)
+
+        await touch_presence(self.redis, user_id, persist=persist)
 
 
 

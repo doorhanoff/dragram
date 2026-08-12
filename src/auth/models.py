@@ -1,7 +1,8 @@
+import datetime
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, Boolean, ForeignKey
+from sqlalchemy import String, Text, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.database import Base
@@ -27,6 +28,13 @@ class UsersOrm(Base):
 
     public_key:  Mapped[str] = mapped_column(Text, nullable=True)
     key_backup:  Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Когда человека видели последний раз. Оперативная отметка живёт в Redis
+    # (см. core/presence), сюда она переписывается раз в десять минут — чтобы
+    # пережить его перезапуск: иначе у всех разом пропадает «был вчера в 21:40».
+    last_seen: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     chats: Mapped[list["ChatsOrm"]] = relationship(
         "ChatsOrm", secondary=chat_members, back_populates="members", lazy="selectin"

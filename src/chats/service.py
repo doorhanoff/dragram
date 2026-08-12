@@ -179,7 +179,9 @@ class ChatsService:
         last_seen_values = await self.redis.mget([last_seen_key(m.id) for m in members])
         for member, online, seen in zip(members, online_flags, last_seen_values):
             member.is_active = online is not None
-            member.last_seen = parse_last_seen(seen)
+            # Redis мог перезапуститься — тогда остаётся отметка из базы,
+            # она же лежит в самом объекте участника.
+            member.last_seen = parse_last_seen(seen) or member.last_seen
 
         for chat in chats:
             chat.unread_count = unread.get(chat.id, 0)

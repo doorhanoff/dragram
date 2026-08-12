@@ -238,7 +238,7 @@ export default function MessageBubble({ msg, userId, isGroup, senderMember, onQu
             выбранным размером текста. */}
         <span
           className="inline-block align-bottom"
-          style={{ width: isSent ? '4.25rem' : '2.75rem', height: '1rem' }}
+          style={{ width: isSent ? '3.5rem' : '2.25rem', height: '1rem' }}
         />
 
         <span

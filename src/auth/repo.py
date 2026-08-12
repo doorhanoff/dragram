@@ -86,6 +86,11 @@ class AuthRepository(BaseRepository):
         stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(image_url=image_url)
         await self.session.execute(stmt)
 
+    async def set_last_seen(self, user_id: uuid.UUID, moment) -> None:
+        """Отметка «был в сети» в базе — запасная копия того, что живёт в Redis."""
+        stmt = update(UsersOrm).where(UsersOrm.id == user_id).values(last_seen=moment)
+        await self.session.execute(stmt)
+
     async def set_public_key(self, user_id: uuid.UUID, public_key: str) -> None:
         from sqlalchemy import update
         stmt = (
