@@ -37,10 +37,13 @@ export default function Avatar({ name = '', id = '', imageUrl, isActive, size = 
   return (
     <div className={`relative flex-shrink-0 ${className}`} style={{ width: size, height: size }}>
       {imageUrl ? (
+        // loading="lazy" убран: аватарка весит килобайты и почти всегда уже
+        // лежит на устройстве, а откладывание до появления в поле зрения как
+        // раз и давало пустой кружок при быстрой прокрутке.
         <img
           src={src}
           alt={name}
-          loading="lazy"
+          decoding="async"
           className="rounded-full object-cover w-full h-full"
         />
       ) : (

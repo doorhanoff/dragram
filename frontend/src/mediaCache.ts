@@ -20,17 +20,37 @@ const META = 'meta'
 /** Потолок кеша. Примерно как «средний» в популярных мессенджерах. */
 const MAX_BYTES = 200 * 1024 * 1024
 
+/**
+ * Соединение с базой — одно на всё приложение.
+ *
+ * Раньше indexedDB.open вызывался на каждую картинку: список чатов с двумя
+ * десятками аватарок открывал базу двадцать раз подряд, и они появлялись
+ * по одной, будто скачиваются заново.
+ */
+let dbPromise: Promise<IDBDatabase> | null = null
+
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1)
     req.onupgradeneeded = e => {
       const db = (e.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META)
     }
-    req.onsuccess = e => resolve((e.target as IDBOpenDBRequest).result)
+    req.onsuccess = e => {
+      const db = (e.target as IDBOpenDBRequest).result
+      // Соединение могут закрыть снаружи (очистка данных приложения,
+      // смена версии) — тогда следующий вызов откроет заново.
+      db.onclose = () => { dbPromise = null }
+      db.onversionchange = () => { db.close(); dbPromise = null }
+      resolve(db)
+    }
     req.onerror = e => reject((e.target as IDBOpenDBRequest).error)
   })
+  // Неудачную попытку не запоминаем, иначе кеш отвалится навсегда.
+  dbPromise.catch(() => { dbPromise = null })
+  return dbPromise
 }
 
 function idbGet<T>(db: IDBDatabase, store: string, key: string): Promise<T | undefined> {
@@ -135,6 +155,40 @@ export function releaseLiveUrls(): void {
   liveUrls.clear()
 }
 
+/**
+ * Отметки «файл открывали» копятся в памяти и уходят в базу пачкой.
+ *
+ * Индекс — один объект со всеми записями, и раньше он читался и переписывался
+ * целиком на КАЖДУЮ показанную картинку. Двадцать аватарок в списке означали
+ * двадцать чтений и двадцать записей всего индекса подряд — из-за этого
+ * картинки и появлялись по одной. Точность здесь не нужна: срок последнего
+ * обращения важен с точностью до дней, а не секунд.
+ */
+const touched = new Set<string>()
+let touchTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleTouchFlush(): void {
+  if (touchTimer) return
+  touchTimer = setTimeout(async () => {
+    touchTimer = null
+    const keys = [...touched]
+    touched.clear()
+    if (!keys.length) return
+    try {
+      const db = await openDB()
+      const index = await readIndex(db)
+      const now = Date.now()
+      let changed = false
+      for (const k of keys) {
+        if (index[k]) { index[k].usedAt = now; changed = true }
+      }
+      if (changed) await idbPut(db, META, 'index', index)
+    } catch {
+      // Не записалось — вытеснение просто посчитает файл менее свежим.
+    }
+  }, 5000)
+}
+
 /** Отдаёт файл из кеша или null. */
 export async function getCachedMedia(url: string): Promise<Blob | null> {
   const key = storageKey(url)
@@ -143,12 +197,8 @@ export async function getCachedMedia(url: string): Promise<Blob | null> {
     const db = await openDB()
     const blob = await idbGet<Blob>(db, STORE, key)
     if (!blob) return null
-    // Отмечаем обращение: вытеснение опирается на этот срок.
-    const index = await readIndex(db)
-    if (index[key]) {
-      index[key].usedAt = Date.now()
-      await idbPut(db, META, 'index', index)
-    }
+    touched.add(key)
+    scheduleTouchFlush()
     return blob
   } catch {
     return null

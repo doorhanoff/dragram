@@ -73,7 +73,8 @@ export function useCachedImage(url?: string | null): string | undefined {
     if (!key) { setSrc(mediaSrc(url) || undefined); return }
 
     let cancelled = false
-    setSrc(undefined)
+    // Прежнюю картинку НЕ стираем: пусть висит, пока не готова новая. Пустой
+    // кадр посреди списка и читается как «загружается заново».
     load(url, key).then(objectUrl => {
       if (cancelled) return
       setSrc(objectUrl ?? mediaSrc(url) ?? undefined)
