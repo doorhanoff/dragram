@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { IconSearch, IconPencilPlus } from '@tabler/icons-react'
+import { IconSearch, IconUsersPlus } from '@tabler/icons-react'
 import Avatar from '../ui/Avatar'
 import ProfileModal from '../ui/ProfileModal'
 import GroupChatModal from './GroupChatModal'
-import NewChatSheet from './NewChatSheet'
 import type { Chat, User } from '../../types'
 import { api } from '../../api'
 import { fmtListTime } from '../../utils'
@@ -86,7 +85,6 @@ export default function ChatList({ user, chats, activeChatId, previews, onOpenCh
   const [searching,   setSearching]   = useState(false)
   const [directory,   setDirectory]   = useState<any[] | null>(null)
   const [showGroup,   setShowGroup]   = useState(false)
-  const [showNewChat, setShowNewChat] = useState(false)
   const [profileId,   setProfileId]   = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -186,31 +184,27 @@ export default function ChatList({ user, chats, activeChatId, previews, onOpenCh
               {chats.length === 0 && (
                 <div className="px-6 py-12 text-center">
                   <p className="text-lg font-bold text-primary mb-1">Здесь пока пусто</p>
-                  <p className="text-md text-muted">Нажмите кнопку с карандашом внизу справа и выберите, кому написать.</p>
+                  <p className="text-md text-muted">
+                    Найдите человека через поиск наверху, чтобы написать ему.
+                    А кнопка внизу справа собирает группу.
+                  </p>
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* «Написать» — то, ради чего мессенджер и открывают */}
+        {/* Кнопка ведёт прямо к созданию группы: личные чаты со всеми родными
+            заводятся сами по телефонной книге, и выбирать из списка, кому
+            написать, было незачем — этот список и так лежит выше. */}
         <button
-          onClick={() => setShowNewChat(true)}
-          aria-label="Написать"
+          onClick={() => setShowGroup(true)}
+          aria-label="Новая группа"
           className="absolute right-4 bottom-4 w-16 h-16 rounded-full bg-accent text-onAccent flex items-center justify-center shadow-pop transition-opacity hover:opacity-90"
         >
-          <IconPencilPlus size={26} stroke={1.9} />
+          <IconUsersPlus size={26} stroke={1.9} />
         </button>
       </div>
-
-      {showNewChat && (
-        <NewChatSheet
-          myId={user.id}
-          onClose={() => setShowNewChat(false)}
-          onPick={uid => { setShowNewChat(false); onStartChat(uid) }}
-          onNewGroup={() => { setShowNewChat(false); setShowGroup(true) }}
-        />
-      )}
 
       {showGroup && (
         <GroupChatModal
