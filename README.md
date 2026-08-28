@@ -79,33 +79,34 @@ dragram/
 ```bash
 git clone https://github.com/doorhanoff/dragram.git
 cd dragram
-cp .env.example .env   # then fill in the values
+cp .env.example .env
 ```
 
-Minimum required `.env`:
+`cp` overwrites an existing `.env` — skip it if you already have one configured.
+
+The template ships with placeholders (`DB_NAME=myproject`, `S3_BUCKET=your-bucket-name`, `JWT_SECRET_KEY=change-me-…`). They are not working values. These have no default in `src/config.py` and must be set before the stack starts:
 
 ```env
 # PostgreSQL
-DB_HOST=db
-DB_PORT=5432
+DB_HOST=db            # `localhost` when running without Docker; docker-compose overrides it to `db`
+DB_PORT=5432          # port inside the Docker network — always 5432
 DB_USER=postgres
-DB_PASS=yourpassword
+DB_PASS=postgres
 DB_NAME=dragram
 
-# Redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-
 # JWT — generate with: python -c "import secrets; print(secrets.token_hex(32))"
-JWT_SECRET_KEY=change_me
-
-# S3-compatible storage
-S3_ENDPOINT=https://storage.yandexcloud.net
-S3_REGION=ru-central1
-S3_BUCKET=your-bucket
-S3_ACCESS_KEY=your-key
-S3_SECRET_KEY=your-secret
+JWT_SECRET_KEY=
 ```
+
+Everything else falls back to a default. Without the `S3_*` keys the app still starts — only media upload fails.
+
+**`DB_NAME` is fixed on the first run.** Postgres creates the database only while initialising an empty volume; after that it logs `Skipping initialization` and ignores the variable. Change `DB_NAME` later and the app exits with `InvalidCatalogNameError: database "…" does not exist`, because the volume still holds the old one. To switch names, drop the volume first:
+
+```bash
+docker compose down -v   # deletes the database and everything in it
+```
+
+`DB_HOST_PORT` (5433 by default) is the host port the database is published on, for psql or DBeaver. It is deliberately separate from `DB_PORT`, which goes into the app's connection string and inside the Docker network is always 5432. Change it if 5433 is taken — 5432 usually is, by a locally installed PostgreSQL.
 
 ### 2. Run with Docker Compose
 
