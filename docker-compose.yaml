@@ -11,8 +11,13 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
+    # DB_HOST_PORT нужен только для доступа к базе с хоста (psql, DBeaver).
+    # Подставить сюда DB_PORT нельзя: та же переменная уходит в строку
+    # подключения приложения, а внутри сети Docker оно ходит на db:5432.
+    # По умолчанию 5433: 5432 обычно занят локально установленным PostgreSQL,
+    # и тогда Docker падает с "forbidden by its access permissions".
     ports:
-      - "127.0.0.1:${DB_PORT}:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -39,6 +44,10 @@ services:
       - .env
     environment:
       DB_HOST: db
+      # Postgres из compose поднят без сертификата, а дефолт DB_SSL=True в
+      # src/config.py рассчитан на облачную базу. Трафик до неё не выходит за
+      # пределы сети Docker, TLS не нужен.
+      DB_SSL: "false"
       REDIS_HOST: redis
       # Локальная разработка: /docs включены, куки без Secure, CORS с localhost.
       DEBUG: "true"

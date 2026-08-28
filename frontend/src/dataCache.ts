@@ -132,19 +132,31 @@ export async function clearDataCache(): Promise<void> {
  * применяется, только если сеть ещё не ответила.
  *
  * Сеть не ответила совсем — остаёмся на кеше, это и есть работа без сети.
+ *
+ * `prepare` — что нужно успеть сделать ДО показа: сейчас это подъём картинок
+ * с устройства (mediaCache.warmLiveUrls). Показать список и только потом
+ * начать искать к нему аватарки — значит нарисовать кадр с пустыми кружками,
+ * а это ровно то, чего в популярных мессенджерах не бывает.
  */
 export async function withCache<T>(
   key: string,
   fetcher: () => Promise<T>,
   apply: (value: T) => void,
+  prepare?: (value: T) => Promise<void>,
 ): Promise<void> {
   let gotFresh = false
-  readCache<T>(key).then(cached => {
-    if (cached != null && !gotFresh) apply(cached)
+  readCache<T>(key).then(async cached => {
+    if (cached == null || gotFresh) return
+    await prepare?.(cached)
+    // Пока готовились, сеть могла ответить — тогда сохранённое уже не нужно.
+    if (!gotFresh) apply(cached)
   })
   try {
     const fresh = await fetcher()
+    // Флаг ставим до подготовки, а не после: иначе кеш успел бы примениться
+    // поверх свежего, пока мы поднимаем картинки.
     gotFresh = true
+    await prepare?.(fresh)
     apply(fresh)
     writeCache(key, fresh)
   } catch {

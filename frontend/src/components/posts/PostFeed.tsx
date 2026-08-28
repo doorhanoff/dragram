@@ -4,8 +4,24 @@ import PostCard from './PostCard'
 import type { Post } from '../../types'
 import { api } from '../../api'
 import { withCache } from '../../dataCache'
+import { warmLiveUrls } from '../../mediaCache'
 
 type Filter = 'all' | 'saved'
+
+/**
+ * Что нужно показать сразу при открытии ленты: аватарка автора и обложка.
+ *
+ * Остальные вложения поста лежат за обложкой и открываются отдельным нажатием —
+ * тянуть их с устройства заранее незачем.
+ */
+function postImages(posts: Post[]): (string | null | undefined)[] {
+  const urls: (string | null | undefined)[] = []
+  for (const post of posts) {
+    urls.push(post.created_by?.image_url)
+    urls.push((post.materials || []).find(u => !/\.(mp4|webm|mov)$/i.test(u)))
+  }
+  return urls
+}
 
 interface Props {
   query: string
@@ -50,11 +66,13 @@ export default function PostFeed({
           `posts:${filter}`,
           async () => (await api.getPosts(null, 20, 0, filter)) || [],
           apply,
+          async items => { await warmLiveUrls(postImages(items)) },
         )
         return
       }
 
       const items: Post[] = await api.getPosts(text || null, 20, offset, filter)
+      await warmLiveUrls(postImages(items || []))
       if (reset) apply(items)
       else {
         setPosts(p => [...p, ...(items || [])])

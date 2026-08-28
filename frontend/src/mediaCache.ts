@@ -61,6 +61,30 @@ function idbGet<T>(db: IDBDatabase, store: string, key: string): Promise<T | und
   })
 }
 
+/**
+ * Читает пачку ключей за ОДНУ транзакцию.
+ *
+ * Каждая транзакция в хранилище — отдельный круг ожидания, и на телефоне он
+ * стоит куда дороже самого чтения. Двадцать аватарок списка чатов — это
+ * двадцать таких кругов подряд, если просить их по одной.
+ */
+function idbGetMany<T>(db: IDBDatabase, store: string, keys: string[]): Promise<Map<string, T>> {
+  return new Promise((resolve, reject) => {
+    const out = new Map<string, T>()
+    const tx = db.transaction(store, 'readonly')
+    const os = tx.objectStore(store)
+    for (const key of keys) {
+      const r = os.get(key)
+      r.onsuccess = e => {
+        const value = (e.target as IDBRequest).result
+        if (value !== undefined) out.set(key, value)
+      }
+    }
+    tx.oncomplete = () => resolve(out)
+    tx.onerror = e => reject((e.target as IDBTransaction).error)
+  })
+}
+
 function idbPut(db: IDBDatabase, store: string, key: string, value: any): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, 'readwrite')
@@ -156,37 +180,107 @@ export function releaseLiveUrls(): void {
 }
 
 /**
- * Отметки «файл открывали» копятся в памяти и уходят в базу пачкой.
+ * Правки индекса копятся в памяти и уходят в базу одной пачкой.
  *
- * Индекс — один объект со всеми записями, и раньше он читался и переписывался
- * целиком на КАЖДУЮ показанную картинку. Двадцать аватарок в списке означали
- * двадцать чтений и двадцать записей всего индекса подряд — из-за этого
- * картинки и появлялись по одной. Точность здесь не нужна: срок последнего
- * обращения важен с точностью до дней, а не секунд.
+ * Индекс — один объект со всеми записями, и переписывается он целиком. Раньше
+ * это делалось на КАЖДУЮ картинку: и когда её показали, и когда скачали.
+ * Открыть альбом на тридцать фотографий значило тридцать раз прочитать и
+ * тридцать раз переписать весь индекс, по очереди, в том же хранилище, откуда
+ * читаются сами картинки. Точность тут не нужна: срок последнего обращения
+ * важен с точностью до дней, а не секунд.
  */
 const touched = new Set<string>()
-let touchTimer: ReturnType<typeof setTimeout> | null = null
+const pendingSizes = new Map<string, number>()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+/** Проходы идут по очереди — см. flushIndex. */
+let flushing: Promise<void> = Promise.resolve()
 
-function scheduleTouchFlush(): void {
-  if (touchTimer) return
-  touchTimer = setTimeout(async () => {
-    touchTimer = null
-    const keys = [...touched]
-    touched.clear()
-    if (!keys.length) return
-    try {
-      const db = await openDB()
-      const index = await readIndex(db)
-      const now = Date.now()
-      let changed = false
-      for (const k of keys) {
-        if (index[k]) { index[k].usedAt = now; changed = true }
-      }
-      if (changed) await idbPut(db, META, 'index', index)
-    } catch {
-      // Не записалось — вытеснение просто посчитает файл менее свежим.
+function scheduleIndexFlush(): void {
+  if (flushTimer) return
+  flushTimer = setTimeout(() => { flushIndex() }, 2000)
+}
+
+/**
+ * Два прохода разом переписали бы индекс поверх друг друга: второй прочитал бы
+ * его раньше, чем первый успел записать, и правки первого пропали бы. Поэтому
+ * выстраиваем их в очередь.
+ */
+function flushIndex(): Promise<void> {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+  flushing = flushing.then(writeIndexChanges)
+  return flushing
+}
+
+async function writeIndexChanges(): Promise<void> {
+  if (!touched.size && !pendingSizes.size) return
+  const added = [...pendingSizes]; pendingSizes.clear()
+  const used  = [...touched];      touched.clear()
+  try {
+    const db = await openDB()
+    const index = await readIndex(db)
+    const now = Date.now()
+    for (const [key, size] of added) index[key] = { size, usedAt: now }
+    for (const key of used) if (index[key]) index[key].usedAt = now
+    await idbPut(db, META, 'index', await evictIfNeeded(db, index))
+  } catch {
+    // Не записалось — файлы на месте, потеряется только их учёт в размере.
+  }
+}
+
+/**
+ * Приложение уходит в фон — дописываем индекс немедленно.
+ *
+ * Android сворачивает и убивает приложение без предупреждения, а отложенная
+ * запись живёт две секунды. Без этого только что скачанный файл остался бы в
+ * хранилище неучтённым: место занимает, а вытеснение о нём не знает.
+ */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushIndex()
+  })
+  window.addEventListener('pagehide', () => { flushIndex() })
+}
+
+/**
+ * Поднимает пачку файлов с устройства ЗАРАНЕЕ — до того, как их попросят
+ * нарисовать.
+ *
+ * Это главное, чем список здесь отличался от телеграмовского. Там путь к файлу
+ * известен сразу, и картинка попадает в тот же кадр, что и строка списка.
+ * Здесь же каждая картинка начинала свой путь, только когда её компонент уже
+ * нарисовался пустым: хранилище отвечает не мгновенно, ответ приходит
+ * следующим кадром — отсюда и волна «догружающихся» аватарок при первом
+ * заходе в раздел.
+ *
+ * Поэтому список чатов, альбомы и ленту прогреваем перед показом: одна
+ * транзакция на всё, и к первой отрисовке ссылки уже лежат в памяти.
+ */
+export async function warmLiveUrls(urls: (string | null | undefined)[]): Promise<number> {
+  const keys: string[] = []
+  const seen = new Set<string>()
+  for (const url of urls) {
+    if (!url) continue
+    const key = storageKey(url)
+    // Уже поднятые пропускаем — прогрев зовётся и на обновлениях списка.
+    if (!key || seen.has(key) || liveUrls.has(key)) continue
+    seen.add(key)
+    keys.push(key)
+  }
+  if (!keys.length) return 0
+  try {
+    const db = await openDB()
+    const found = await idbGetMany<Blob>(db, STORE, keys)
+    for (const [key, blob] of found) {
+      if (!blob?.size) continue
+      putLiveUrl(key, blob)
+      touched.add(key)
     }
-  }, 5000)
+    if (found.size) scheduleIndexFlush()
+    return found.size
+  } catch {
+    // Не поднялось — картинки просто пойдут прежним путём, по одной.
+    return 0
+  }
 }
 
 /** Отдаёт файл из кеша или null. */
@@ -198,7 +292,7 @@ export async function getCachedMedia(url: string): Promise<Blob | null> {
     const blob = await idbGet<Blob>(db, STORE, key)
     if (!blob) return null
     touched.add(key)
-    scheduleTouchFlush()
+    scheduleIndexFlush()
     return blob
   } catch {
     return null
@@ -212,9 +306,11 @@ export async function putCachedMedia(url: string, blob: Blob): Promise<void> {
   try {
     const db = await openDB()
     await idbPut(db, STORE, key, blob)
-    const index = await readIndex(db)
-    index[key] = { size: blob.size, usedAt: Date.now() }
-    await idbPut(db, META, 'index', await evictIfNeeded(db, index))
+    // Сам файл записан, а учёт в индексе уйдёт пачкой: при загрузке альбома
+    // таких файлов десятки, и переписывать весь индекс на каждый — как раз то,
+    // из-за чего первая загрузка и была медленной.
+    pendingSizes.set(key, blob.size)
+    scheduleIndexFlush()
   } catch {
     // Кончилось место — не беда, просто останемся без кеша для этого файла.
   }
@@ -232,6 +328,9 @@ const MAX_IDLE_MS = 30 * 24 * 60 * 60 * 1000
 
 export async function sweepMediaCache(maxIdleMs = MAX_IDLE_MS): Promise<number> {
   try {
+    // Сначала дописываем отложенное, иначе только что скачанный файл в индексе
+    // ещё не значится, а после уборки запись о нём легла бы уже поверх итога.
+    await flushIndex()
     const db = await openDB()
     const index = await readIndex(db)
     const cutoff = Date.now() - maxIdleMs
@@ -263,6 +362,14 @@ export async function cacheSize(): Promise<number> {
 /** Очистка кеша: и по кнопке в настройках, и при выходе из аккаунта. */
 export async function clearMediaCache(): Promise<void> {
   releaseLiveUrls()
+  // Отложенные правки выбрасываем, а не дописываем: иначе через две секунды
+  // после «Очистить кеш» в индекс вернулись бы записи о стёртых файлах.
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+  touched.clear()
+  pendingSizes.clear()
+  // Проход, который успел начаться, тоже дожидаемся — он уже забрал свою
+  // порцию правок и допишет их поверх очищенного индекса.
+  await flushing.catch(() => {})
   try {
     const db = await openDB()
     await new Promise<void>((resolve, reject) => {

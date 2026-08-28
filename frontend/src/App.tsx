@@ -8,7 +8,7 @@ import {
 import { syncChatKey, syncNames, clearNativeKeys, clearChatNotifications } from './nativeKeys'
 import { canReadContacts, collectContactHashes } from './nativeContacts'
 import { readCachedMessages, writeCachedMessages, appendCachedMessage, dropCachedMessage, clearMessageCache } from './messageCache'
-import { clearMediaCache } from './mediaCache'
+import { clearMediaCache, warmLiveUrls } from './mediaCache'
 import { withCache, clearDataCache, readCache, writeCache, sweepCaches } from './dataCache'
 import { showToast } from './utils'
 
@@ -123,6 +123,26 @@ function writeCachedUser(u: User | null) {
     if (u) localStorage.setItem(SESSION_KEY, JSON.stringify(u))
     else localStorage.removeItem(SESSION_KEY)
   } catch {}
+}
+
+/**
+ * Все аватарки, которые понадобятся списку чатов.
+ *
+ * Не только сама строка списка: участники нужны для групп — их аватарки стоят
+ * под каждым сообщением, и открывать чат с пустыми кружками не годится.
+ */
+function chatAvatars(chats: Chat[]): (string | null | undefined)[] {
+  const urls: (string | null | undefined)[] = []
+  for (const chat of chats) {
+    urls.push(chat.image_url)
+    for (const m of chat.members || []) urls.push(m.image_url)
+  }
+  return urls
+}
+
+/** Фотографии переписки: у сообщения-картинки ссылка лежит в text. */
+function messageImages(msgs: Message[]): (string | null | undefined)[] {
+  return msgs.filter(m => m.type === 'image').map(m => m.text)
 }
 
 /** Строка под именем чата: «Вы: …», «Мама: …», «📷 Фото». */
@@ -434,14 +454,19 @@ export default function App() {
     // интернет есть. Сеть ответит — перерисуем.
     let gotFresh = false
     if (myId && !chatsRef.current.length) {
-      readCache<Chat[]>(`chats:${myId}`).then(cached => {
-        if (cached?.length && !gotFresh) applyList(cached)
+      readCache<Chat[]>(`chats:${myId}`).then(async cached => {
+        if (!cached?.length || gotFresh) return
+        // Аватарки поднимаем ДО показа списка: одна транзакция на все разом,
+        // и первый же кадр выходит с картинками, а не с пустыми кружками.
+        await warmLiveUrls(chatAvatars(cached))
+        if (!gotFresh) applyList(cached)
       })
     }
 
     try {
       const list: Chat[] = await api.getChats() || []
       gotFresh = true
+      await warmLiveUrls(chatAvatars(list))
       applyList(list)
       if (myId) writeCache(`chats:${myId}`, list)
     } catch {
@@ -558,7 +583,12 @@ export default function App() {
   const loadAlbums = useCallback(async () => {
     const myId = userIdRef.current
     if (!myId) return
-    await withCache<Album[]>(`albums:${myId}`, async () => (await api.getAlbums()) || [], setAlbums)
+    await withCache<Album[]>(
+      `albums:${myId}`,
+      async () => (await api.getAlbums()) || [],
+      setAlbums,
+      async list => { await warmLiveUrls(list.map(a => a.cover)) },
+    )
   }, [])
 
   useEffect(() => {
@@ -714,7 +744,10 @@ export default function App() {
       const cached = await readCachedMessages(myId, chatId)
       if (cached.length) {
         // Расшифровываем ДО показа: иначе на миг мелькнёт шифротекст.
+        // Фотографии поднимаем там же и тем же приёмом — чат должен
+        // открываться сразу целиком, а не дорисовываться на глазах.
         const decCached = await decryptMsgs(cached, key)
+        await warmLiveUrls(messageImages(decCached))
         setMessages(prev => ({ ...prev, [chatId]: decCached }))
       }
 
@@ -722,6 +755,7 @@ export default function App() {
       const msgs = await api.getMessages(chatId).catch(() => null)
       if (msgs) {
         const dec = await decryptMsgs(msgs, key)
+        await warmLiveUrls(messageImages(dec))
         setMessages(prev => ({ ...prev, [chatId]: dec }))
         writeCachedMessages(myId, chatId, msgs)
       }

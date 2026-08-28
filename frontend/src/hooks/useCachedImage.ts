@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { gateHeaders, mediaSrc } from '../api'
+import { mediaSrc } from '../api'
 import { getCachedMedia, putCachedMedia, storageKey, getLiveUrl, putLiveUrl } from '../mediaCache'
 
 /**
@@ -41,7 +41,24 @@ async function load(url: string, key: string): Promise<string | null> {
     if (cached) return putLiveUrl(key, cached)
     try {
       const net = mediaSrc(url)
-      const res = await fetch(net!, { headers: gateHeaders(), credentials: 'include' })
+      // Ни credentials, ни заголовка двери здесь быть не должно — из-за них
+      // кеш не работал вообще, ни одного дня.
+      //
+      // Ручка /media отвечает перенаправлением в хранилище, а хранилище
+      // разрешает читать себя всем: `Access-Control-Allow-Origin: *`. Правила
+      // браузера такой ответ с `credentials: 'include'` отвергают наглухо —
+      // подстановочный `*` и отправка кук вместе не допускаются. Запрос падал
+      // ещё до того, как файл доходил до нас, putCachedMedia не звался ни
+      // разу, и на устройстве не оседало ничего. Картинку было видно только
+      // потому, что дальше отрабатывал запасной путь — обычный <img src>,
+      // которому эти правила не писаны. Оттого каждый переход и выглядел как
+      // загрузка заново: он ею и был.
+      //
+      // Заголовок двери тут тоже лишний: /media стоит в TICKETED_PREFIXES и
+      // мимо двери проходит, а пускает внутрь тикет в самом адресе. Зато без
+      // заголовка запрос считается простым, и браузер перестаёт спрашивать
+      // разрешение отдельным заходом перед каждой картинкой.
+      const res = await fetch(net!)
       if (!res.ok) throw new Error(String(res.status))
       const blob = await res.blob()
       putCachedMedia(url, blob)

@@ -13,9 +13,13 @@ interface Props extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {
  * альбома, вложения поста), а хук в цикле не вызвать — значит на каждую
  * нужен свой компонент.
  */
-export default function CachedImg({ url, ...rest }: Props) {
+export default function CachedImg({ url, loading, ...rest }: Props) {
   const src = useCachedImage(url)
+  // Файл уже на устройстве — откладывать его до появления в поле зрения нечего:
+  // трафика это не экономит, а при быстрой прокрутке даёт пустую плитку.
+  // loading="lazy" остаётся только для того, что придётся тянуть из сети.
+  const defer = src?.startsWith('blob:') ? undefined : loading
   // Пока адрес не готов, тег рисуется без src — место под картинку уже
   // занято версткой, поэтому ничего не прыгает.
-  return <img {...rest} src={src} />
+  return <img {...rest} loading={defer} src={src} />
 }

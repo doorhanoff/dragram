@@ -12,6 +12,7 @@ import AddMemberModal from './AddMemberModal'
 import { downloadUrl, showToast, parseDate } from '../../utils'
 import { ask } from '../ui/dialogs'
 import { withCache } from '../../dataCache'
+import { warmLiveUrls } from '../../mediaCache'
 import type { AlbumDetail, AlbumMaterial } from '../../types'
 
 function isVideo(link: string) {
@@ -67,8 +68,25 @@ export default function AlbumGallery({ albumId, onBack, onChanged }: Props) {
   function load() {
     // Сначала показываем сохранённое, затем обновляем с сервера: альбом
     // открывается сразу и листается без сети.
-    withCache<AlbumDetail>(`album:${albumId}`, () => api.getAlbum(albumId), setAlbum)
-    withCache<AlbumMaterial[]>(`albumMaterials:${albumId}`, () => api.getAlbumMaterials(albumId), setMaterials)
+    withCache<AlbumDetail>(
+      `album:${albumId}`,
+      () => api.getAlbum(albumId),
+      setAlbum,
+      async a => { await warmLiveUrls((a.members || []).map(m => m.image_url)) },
+    )
+    withCache<AlbumMaterial[]>(
+      `albumMaterials:${albumId}`,
+      () => api.getAlbumMaterials(albumId),
+      setMaterials,
+      // Плитки поднимаем разом, до показа сетки: иначе фотографии проявляются
+      // по одной сверху вниз — это и читается как «грузится заново».
+      // Только начало альбома: дальше человек ещё не долистал, а держать в
+      // памяти ссылки на все пятьсот фотографий незачем — они всё равно
+      // вытеснятся (см. MAX_LIVE_URLS), не дождавшись своей очереди.
+      async list => {
+        await warmLiveUrls(list.filter(m => !isVideo(m.link)).slice(0, 120).map(m => m.link))
+      },
+    )
       // Ни кеша, ни сети — показываем пустой альбом, а не вечную загрузку.
       .finally(() => setMaterials(prev => prev ?? []))
   }
