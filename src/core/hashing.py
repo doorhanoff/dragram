@@ -1,6 +1,10 @@
-from pwdlib import PasswordHash
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
-pwd_context = PasswordHash.recommended()
+pwd_context = PasswordHasher(
+    time_cost=1,       # Reduced from default 2
+    memory_cost=16384, # Reduced from default 65536 KiB
+)
 
 
 def hash_password(password: str) -> str:
@@ -8,4 +12,8 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
+    try:
+        pwd_context.verify(hashed, password)
+        return True
+    except VerifyMismatchError:
+        return False
